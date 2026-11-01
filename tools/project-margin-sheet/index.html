@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目毛利表</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-head">
+  <div class="app-head-main">
+    <h1>项目毛利表</h1>
+    <p class="lead">接项目的个人和小工作室用:录入报价和成本,算出毛利、毛利率和每小时毛利,看哪个项目在亏你的时间。数据只存在本机浏览器。第一步:点「载入示例」看 9 个合成项目,或点「新建项目」。</p>
+    <p class="lead" id="today-fixed" hidden></p>
+  </div>
+  <div class="app-head-actions">
+    <button type="button" class="btn btn-primary" id="new-project">新建项目</button>
+    <button type="button" class="btn" id="load-sample">载入示例</button>
+    <label class="inline-field">默认机会成本时薪(元/小时)
+      <input type="text" inputmode="decimal" id="default-opp" autocomplete="off">
+    </label>
+  </div>
+</header>
+
+<div class="notice notice-danger" id="save-banner" role="alert" hidden></div>
+<div class="notice" id="sample-confirm" role="alertdialog" aria-labelledby="sample-confirm-text" hidden>
+  <p id="sample-confirm-text"></p>
+  <div class="btn-row">
+    <button type="button" class="btn btn-danger" id="sample-confirm-yes">确认替换</button>
+    <button type="button" class="btn" id="sample-confirm-no">取消,保留现有数据</button>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="功能">
+  <div role="tablist" aria-label="功能" style="display:contents">
+  <button type="button" class="tab" role="tab" data-tab="projects" aria-selected="true">项目</button>
+  <button type="button" class="tab" role="tab" data-tab="portfolio" aria-selected="false">组合</button>
+  <button type="button" class="tab" role="tab" data-tab="scenario" aria-selected="false">情景</button>
+  <button type="button" class="tab" role="tab" data-tab="export" aria-selected="false">导出与数据</button>
+  </div>
+  <span class="save-state" id="save-state" role="status">尚无数据</span>
+</nav>
+
+<main>
+<!-- 项目 -->
+<section class="pane" data-pane="projects">
+  <div class="split">
+    <aside class="panel list-panel" aria-label="项目列表">
+      <h2>项目列表</h2>
+      <div id="project-list" class="project-list"></div>
+      <div class="empty" id="empty-guide" hidden>
+        <p><strong>还没有项目。</strong></p>
+        <p>点页头的「载入示例」看 9 个合成项目怎么算,或点「新建项目」录入你自己的第一个项目。</p>
+      </div>
+    </aside>
+
+    <div class="editor" id="editor" hidden>
+      <div class="panel">
+        <h2>项目信息</h2>
+        <div class="form-grid">
+          <label class="field span-2">项目名称<input type="text" id="f-name" autocomplete="off"></label>
+          <label class="field span-2">客户<input type="text" id="f-client" autocomplete="off"></label>
+          <label class="field">状态<select id="f-status"></select></label>
+          <label class="field">报价(元)<input type="text" inputmode="decimal" id="f-quote" autocomplete="off"><span class="field-error" data-err="quote" hidden></span></label>
+          <label class="field">报价是否含税
+            <select id="f-tax-included"><option value="no">不含税</option><option value="yes">含税</option></select>
+          </label>
+          <label class="field">税率(%)<input type="text" inputmode="decimal" id="f-tax-rate" autocomplete="off"><span class="field-error" data-err="taxRate" hidden></span></label>
+          <label class="field">开始日期<input type="date" id="f-start"></label>
+          <label class="field">交付日期<input type="date" id="f-deliver"></label>
+          <label class="field">预付比例(%)<input type="text" inputmode="decimal" id="f-prepaid" autocomplete="off"><span class="field-error" data-err="prepaidPct" hidden></span></label>
+          <label class="field">尾款账期(天)<input type="text" inputmode="numeric" id="f-term" autocomplete="off"><span class="field-error" data-err="termDays" hidden></span></label>
+          <label class="field">机会成本时薪(元/小时)<input type="text" inputmode="decimal" id="f-opp" autocomplete="off"><span class="field-error" data-err="opp" hidden></span></label>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn btn-quiet-danger" id="delete-project">删除这个项目</button>
+        </div>
+        <div class="notice" id="delete-confirm" role="alertdialog" hidden>
+          <p>确定删除这个项目和它的全部成本行吗?删除后无法撤销,建议先导出 JSON 备份。</p>
+          <div class="btn-row">
+            <button type="button" class="btn btn-danger" id="delete-yes">确认删除</button>
+            <button type="button" class="btn" id="delete-no">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>成本行</h2>
+        <div id="lines" class="lines"></div>
+        <div class="add-line">
+          <span>添加:</span>
+          <button type="button" class="btn btn-small" data-add="labor">人工</button>
+          <button type="button" class="btn btn-small" data-add="outsource">外包</button>
+          <button type="button" class="btn btn-small" data-add="tool">工具与订阅</button>
+          <button type="button" class="btn btn-small" data-add="travel">差旅</button>
+          <button type="button" class="btn btn-small" data-add="other">其他</button>
+        </div>
+      </div>
+
+      <div class="panel" id="actual-panel">
+        <h2>估算基线与实际</h2>
+        <p class="muted">先锁定当前报价与预计成本。锁定后，继续编辑项目不会改写旧基线；“创建新估算版本”会保留旧版本。缺少的实际记录是未知，不按 0 处理。</p>
+        <div id="baseline-summary"></div>
+        <div class="btn-row">
+          <button type="button" class="btn btn-primary" id="lock-baseline">锁定当前估算</button>
+          <button type="button" class="btn" id="reopen-baseline">创建新估算版本</button>
+        </div>
+        <div class="actual-grid">
+          <form class="actual-form" id="work-form"><h3>记录实际工时</h3>
+            <label class="field">日期<input type="date" name="date" required></label>
+            <label class="field">分钟<input type="text" inputmode="numeric" name="minutes" required></label>
+            <label class="field">时薪(元/小时)<input type="text" inputmode="decimal" name="rate" required></label>
+            <label class="field">币种<input type="text" name="currency" maxlength="3" value="CNY" required></label>
+            <label class="field">来源<input type="text" name="source" placeholder="例如:日历复核" required></label>
+            <label class="field">备注<input type="text" name="note"></label>
+            <button class="btn" type="submit">添加工时</button></form>
+          <form class="actual-form" id="expense-form"><h3>记录实际费用</h3>
+            <label class="field">日期<input type="date" name="date" required></label>
+            <label class="field">金额<input type="text" inputmode="decimal" name="amount" required></label>
+            <label class="field">币种<input type="text" name="currency" maxlength="3" value="CNY" required></label>
+            <label class="field">来源<input type="text" name="source" placeholder="例如:发票或收据" required></label>
+            <label class="field">备注<input type="text" name="note"></label>
+            <button class="btn" type="submit">添加费用</button></form>
+          <form class="actual-form" id="revenue-form"><h3>记录实际收款</h3>
+            <label class="field">日期<input type="date" name="date" required></label>
+            <label class="field">金额<input type="text" inputmode="decimal" name="amount" required></label>
+            <label class="field">币种<input type="text" name="currency" maxlength="3" value="CNY" required></label>
+            <label class="field">来源<input type="text" name="source" placeholder="例如:本人核对的收款记录" required></label>
+            <label class="field">备注<input type="text" name="note"></label>
+            <button class="btn" type="submit">添加收款</button></form>
+        </div>
+        <div id="actual-entries"></div>
+        <form id="completeness-form" class="completeness-form">
+          <label class="field">实际记录截至日<input type="date" name="asOf" required></label>
+          <label class="check-field"><input type="checkbox" name="asserted"> 我确认：截至该日，实际工时、实际费用和实际收款均已录完。未勾选时不显示偏差。</label>
+          <button class="btn" type="submit">保存完整性声明</button>
+        </form>
+        <p class="msg msg-bad" id="actual-msg" hidden></p>
+      </div>
+
+      <div class="panel result-panel" aria-live="polite">
+        <h2>结果</h2>
+        <div id="result"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 组合 -->
+<section class="pane" data-pane="portfolio" hidden>
+  <div id="portfolio-body"></div>
+</section>
+
+<!-- 情景 -->
+<section class="pane" data-pane="scenario" hidden>
+  <div id="scenario-body"></div>
+</section>
+
+<!-- 导出 -->
+<section class="pane" data-pane="export" hidden>
+  <div class="export-grid">
+    <div class="panel">
+      <p class="msg msg-bad" id="export-block" role="status" hidden></p>
+      <h2>项目表 CSV</h2>
+      <p class="muted">一行一个项目,含收入、成本、毛利、毛利率、预计回款日和逾期。金额单位是元。</p>
+      <div class="btn-row"><button type="button" class="btn btn-primary" id="export-csv">下载项目表 CSV</button></div>
+    </div>
+    <div class="panel">
+      <h2>单项目毛利说明 Markdown</h2>
+      <label class="field">选择项目<select id="md-project"></select></label>
+      <div class="btn-row"><button type="button" class="btn btn-primary" id="export-md">下载单项目毛利说明 Markdown</button></div>
+      <pre class="preview" id="md-preview" tabindex="0"></pre>
+    </div>
+    <div class="panel">
+      <h2>JSON 备份与导入</h2>
+      <p class="muted">备份包含全部项目和设置。导入时任何字段不合法都会整份拒绝,并告诉你原因,不会悄悄改数据。</p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="export-json">下载全部项目 JSON 备份</button>
+        <label class="btn file-btn">选择 JSON 备份文件导入<input type="file" id="import-file" accept=".json,application/json"></label>
+      </div>
+      <p class="msg" id="import-msg" role="status" hidden></p>
+      <div class="notice" id="import-confirm" role="alertdialog" hidden>
+        <p id="import-confirm-text"></p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-danger" id="import-yes">确认替换</button>
+          <button type="button" class="btn" id="import-no">取消</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>清空数据</h2>
+      <p class="muted">删除本机保存的全部项目和设置。今天的日期:<strong id="today-label"></strong></p>
+      <div class="btn-row"><button type="button" class="btn btn-quiet-danger" id="clear-data">清空全部数据</button></div>
+      <div class="notice" id="clear-confirm" role="alertdialog" hidden>
+        <p>确定清空全部项目吗?无法撤销,建议先下载 JSON 备份。</p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-danger" id="clear-yes">确认清空</button>
+          <button type="button" class="btn" id="clear-no">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <p>不做发票、工时打卡和税务申报。含税换算和成本分摊只是粗略估算,分摊比例由你自己设定。示例项目均为合成数据。</p>
+</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

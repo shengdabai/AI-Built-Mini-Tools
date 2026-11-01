@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>半秒脚本练习器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <h1>半秒脚本练习器</h1>
+      <p class="muted">写一句描述动作的现在时句子(例如「我从不刷短视频」),慢慢、清楚、大声地读,每次至少 5 秒。第一步:点右上角「载入示例」看效果,或到「脚本」页写第一句。来自公开书稿的方法,不是治疗。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="import-btn-top" type="button" aria-describedby="import-msg">导入 JSON 备份</button>
+      <input id="import-file" type="file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner danger" role="alert" hidden><p>未保存:浏览器存储不可用或已满,最近的改动只在当前页面内存里。请立刻下载备份。</p><button id="warn-export" type="button">导出当前内存中的全部数据 JSON 备份</button></div>
+  <p id="today-note" class="banner info" hidden></p>
+  <div id="sample-banner" class="banner info" hidden>当前数据含合成示例,不是真实记录。</div>
+  <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-msg" hidden>
+    <strong id="confirm-msg"></strong>
+    <div class="row"><button id="confirm-yes" type="button" class="danger">确认</button><button id="confirm-no" type="button">取消</button></div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <div class="workspace">
+    <aside class="panel side" aria-label="脚本列表">
+      <div class="row between">
+        <h2>我的脚本</h2>
+        <span id="script-count" class="muted"></span>
+      </div>
+      <div id="script-list" class="script-list"></div>
+      <button id="new-script" type="button">新建脚本</button>
+      <label>你的名字(姓名/你版本用)
+        <input id="name" type="text" placeholder="例如:小林">
+      </label>
+      <details class="words">
+        <summary>规则词表(可改)</summary>
+        <div class="stack">
+          <label>动作词(逗号分隔)<textarea id="verbs" rows="3"></textarea></label>
+          <label>情绪词(逗号分隔)<textarea id="emotions" rows="3"></textarea></label>
+          <div class="row"><button id="save-words" type="button">保存词表</button><button id="reset-words" type="button">恢复默认</button></div>
+          <p class="muted">规则检查只是词表匹配,不理解语义。</p>
+        </div>
+      </details>
+    </aside>
+
+    <main class="main">
+      <nav class="tabs" role="tablist" aria-label="视图">
+        <button role="tab" data-tab="practice" aria-selected="true" type="button">练习</button>
+        <button role="tab" data-tab="script" aria-selected="false" type="button">脚本</button>
+        <button role="tab" data-tab="trigger" aria-selected="false" type="button">触发记录</button>
+        <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+      </nav>
+
+      <section id="tab-practice" role="tabpanel">
+        <div id="practice-empty" class="empty" hidden>
+          <p>还没有脚本。先到「脚本」页写一句,或点右上角「载入示例」看看;已有备份文件可点右上角「导入 JSON 备份」。</p>
+        </div>
+        <div id="practice-main" class="stack-lg">
+          <div id="stage" class="stage">
+            <p id="stage-text" class="stage-text"></p>
+            <p id="stage-second" class="stage-second" hidden></p>
+          </div>
+          <div class="meter-wrap">
+            <div class="meter" aria-hidden="true"><div id="meter-fill" class="meter-fill"></div></div>
+            <p id="timer" class="timer">0.0 秒 · 满 5 秒后点「结束」才会计入</p>
+          </div>
+          <div class="practice-actions">
+            <button id="start" type="button" class="primary big">开始</button>
+            <button id="stop" type="button" class="big" disabled>结束</button>
+            <button id="loud-toggle" type="button" class="big" aria-pressed="false">姓名/你版本:关</button>
+          </div>
+          <p class="muted">“姓名/你版本”只把屏幕上的「我」换成你的名字和「你」,不会改变声音,请自己大声朗读。</p>
+          <p id="practice-msg" class="practice-msg" role="status" aria-live="polite"></p>
+
+          <div class="stats">
+            <div class="stat"><span class="stat-label">今日次数</span><strong id="stat-today" class="stat-num">0</strong></div>
+            <div class="stat"><span class="stat-label">累计次数</span><strong id="stat-total" class="stat-num">0</strong></div>
+            <div class="stat"><span class="stat-label">连续天数</span><strong id="stat-streak" class="stat-num">0</strong></div>
+          </div>
+          <p id="stat-note" class="muted"></p>
+
+          <div class="panel">
+            <h3>练习热力日历(近 12 周)</h3>
+            <p class="muted">每格是一天,颜色越深当天练习次数越多(只数满 5 秒的练习)。点击或用方向键选格子,下面显示日期和次数。</p>
+            <div class="heat-wrap">
+              <div class="heat-days" aria-hidden="true"><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span><span>日</span></div>
+              <div id="heatmap" class="heatmap" role="group" aria-label="近 12 周每天练习次数,方向键切换格子"></div>
+            </div>
+            <p id="heat-readout" class="heat-readout" role="status" aria-live="polite"></p>
+            <div class="legend"><span>少</span><i class="cell lv0"></i><span>0 次</span><i class="cell lv1"></i><span>1 次</span><i class="cell lv2"></i><span>2 次</span><i class="cell lv3"></i><span>3 次</span><i class="cell lv4"></i><span>≥4 次</span><span>多</span></div>
+          </div>
+          <div class="panel">
+            <h3>每周次数(近 8 周)</h3>
+            <p class="muted">每周从周一算起,只数满 5 秒的练习;柱高按这 8 周里最大的一周换算。</p>
+            <div id="weekly" class="weekly" role="img" aria-label="近 8 周每周练习次数"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-script" role="tabpanel" hidden>
+        <form id="script-form" class="stack panel" autocomplete="off">
+          <h2 id="form-title">新建脚本</h2>
+          <p class="muted">写一句描述动作的现在时句子。可直接写动作,也可先写触发情境(例如「当……时,我……」)。写动作,不写想要的情绪。</p>
+          <label>脚本(一句话)
+            <textarea id="f-text" rows="2" placeholder="我从不……" aria-describedby="f-text-err"></textarea>
+            <span id="f-text-err" class="field-err" role="alert" hidden></span>
+          </label>
+          <div id="check-result" class="check" aria-live="polite"></div>
+          <div class="grid-2">
+            <label>身份(可选)<input id="f-identity" type="text" placeholder="我是……的人"></label>
+            <label>情境(可选)<input id="f-situation" type="text" placeholder="什么时候最容易失守"></label>
+            <label>理由(可选)<input id="f-reason" type="text" placeholder="为什么要这样做"></label>
+            <label>情绪(可选)<input id="f-emotion" type="text" placeholder="读的时候带什么情绪"></label>
+          </div>
+          <div class="row">
+            <button id="save-script" type="submit" class="primary">保存脚本</button>
+            <button id="delete-script" type="button" class="danger" hidden>删除这条脚本</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="tab-trigger" role="tabpanel" hidden>
+        <div id="trigger-empty" class="empty" hidden><p>先添加一条脚本,再记录触发。</p></div>
+        <div id="trigger-main" class="stack-lg">
+          <div class="panel">
+            <h3 id="rate-title">执行率</h3>
+            <div id="rate-box" class="rates"></div>
+          </div>
+          <form id="trigger-form" class="stack panel" autocomplete="off">
+            <h3>记一笔</h3>
+            <div class="grid-2">
+              <label>刚才的情境<input id="t-situation" type="text" placeholder="发生了什么" aria-describedby="t-situation-err"><span id="t-situation-err" class="field-err" role="alert" hidden></span></label>
+              <label>第一反应<input id="t-reaction" type="text" placeholder="我本能地想……" aria-describedby="t-reaction-err"><span id="t-reaction-err" class="field-err" role="alert" hidden></span></label>
+              <label>执行了脚本吗
+                <select id="t-executed"><option value="yes">执行了</option><option value="no">没有执行</option></select>
+              </label>
+              <label>日期<input id="t-date" type="date" aria-describedby="t-date-err"><span id="t-date-err" class="field-err" role="alert" hidden></span></label>
+            </div>
+            <div class="row"><button id="add-trigger" type="submit" class="primary">添加记录</button></div>
+          </form>
+          <div class="panel">
+            <h3>最近记录</h3>
+            <div id="trigger-list" class="trigger-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-export" role="tabpanel" hidden>
+        <div class="panel stack">
+          <h2>导出</h2>
+          <div class="row">
+            <button id="export-csv" type="button">导出练习记录 CSV</button>
+            <button id="export-md" type="button">导出脚本卡 Markdown</button>
+            <button id="export-json" type="button" class="primary">导出全部数据 JSON 备份</button>
+          </div>
+          <p id="export-note" class="field-err" role="status" hidden></p>
+          <pre id="md-preview" class="preview" aria-label="脚本卡 Markdown 预览"></pre>
+        </div>
+        <div class="panel stack">
+          <h2>导入与数据</h2>
+          <div class="row"><button id="import-btn" type="button" aria-describedby="import-msg">选择 JSON 备份文件导入</button></div>
+          <p class="muted">导入先校验整份文件,通过后显示数量并请你确认,确认后才写入。</p>
+          <div id="import-msg" class="import-msg" role="status" aria-live="polite"></div>
+          <div class="row"><button id="clear-all" type="button" class="danger">清空全部脚本、练习、触发记录和设置</button></div>
+          <p class="muted">数据只存在本浏览器的 localStorage(键 halfsec.v1),不联网。换设备请用 JSON 备份。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

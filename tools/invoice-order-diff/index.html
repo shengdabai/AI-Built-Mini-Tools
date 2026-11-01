@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发票与订单差异核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>发票与订单差异核对</h1>
+    <p>把订单表和发票表按订单号配对,列出金额、数量、单价、税额的差异,得到一份待复核清单。第一步:点右上角「载入示例」看一遍,或在下方粘贴你的订单表。只在本机浏览器里计算,不上传、不付款、不申报。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空数据</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空数据?</strong><span id="clear-scope">两张表和核对参数会被清空。</span>此操作不能撤销,上传的文件本来就不会被保存。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空两张表及核对参数</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong>确认载入合成示例?</strong><span id="sample-scope"></span></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">确认用示例替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,核对参数和示例状态只在当前页面里,关闭页面就会丢失。需要留底请导出待复核清单。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出待复核清单 CSV</button>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+  <p id="sample-badge" class="notice notice--warn" hidden><strong>合成示例:</strong>当前表格和结果都是虚构数据,仅用于演示;改动任一张表、点「清空数据」后这个标记消失。</p>
+
+  <div id="empty-guide" class="panel panel--guide">
+    <h2>还没有数据</h2>
+    <p>先点「载入示例」看一遍完整流程(合成示例,数据是虚构的),或者按顺序操作:</p>
+    <ol class="steps">
+      <li>在下方左栏粘贴订单表,右栏粘贴发票表(从 Excel 复制即可),或选择本地 CSV / TSV 文件。</li>
+      <li>检查每个角色选中的列是否正确,不对就改。</li>
+      <li>设置金额容差和税率。</li>
+      <li>查看待复核清单,导出 CSV 或 Markdown。</li>
+    </ol>
+    <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+  </div>
+
+  <main class="stack">
+    <section class="inputs" aria-label="输入">
+      <div class="panel" id="orders-panel">
+        <h2>订单表</h2>
+        <label class="field">粘贴订单表(含表头;支持制表符 TSV、逗号 CSV、分号分隔)
+          <textarea id="orders-text" spellcheck="false" placeholder="订单号&#9;品名&#9;数量&#9;单价&#9;金额"></textarea>
+        </label>
+        <label class="field">或选择本地文件(.csv / .tsv / .txt,只在本次页面里读取)
+          <input type="file" id="orders-file" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values">
+        </label>
+        <p class="hint" id="orders-info" aria-live="polite">尚未输入。</p>
+        <div class="form-grid" id="orders-map"></div>
+      </div>
+      <div class="panel" id="invoices-panel">
+        <h2>发票表</h2>
+        <label class="field">粘贴发票表(含表头;支持制表符 TSV、逗号 CSV、分号分隔)
+          <textarea id="invoices-text" spellcheck="false" placeholder="发票号&#9;订单号&#9;品名&#9;数量&#9;单价&#9;税额&#9;金额"></textarea>
+        </label>
+        <label class="field">或选择本地文件(.csv / .tsv / .txt,只在本次页面里读取)
+          <input type="file" id="invoices-file" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values">
+        </label>
+        <p class="hint" id="invoices-info" aria-live="polite">尚未输入。</p>
+        <div class="form-grid" id="invoices-map"></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="params-title">
+      <h2 id="params-title">核对参数</h2>
+      <div class="form-grid">
+        <label class="field">金额容差(绝对值,元)
+          <input type="text" inputmode="decimal" id="p-tolabs" value="0.01" autocomplete="off" aria-describedby="param-error">
+        </label>
+        <label class="field">百分比容差(%)
+          <input type="text" inputmode="decimal" id="p-tolpct" value="0.5" autocomplete="off" aria-describedby="param-error">
+        </label>
+        <label class="field">税率期望值(%,留空则不查税额)
+          <input type="text" inputmode="decimal" id="p-tax" value="13" autocomplete="off" aria-describedby="param-error">
+        </label>
+        <label class="field field--check">
+          <span class="check-row"><input type="checkbox" id="p-byname"> 严格按「订单号 + 品名」匹配</span>
+          <span class="hint">默认只按订单号;同一订单多行时先按品名,再按顺序。勾选后品名对不上就不配对。</span>
+        </label>
+      </div>
+      <p class="hint">金额差只要不超过绝对值容差或百分比容差之一,就算一致。容差是你自己设的,不是会计准则。税额检查按「税额 = 金额 × 税率」,金额请选不含税金额。</p>
+      <p id="param-error" class="notice notice--danger" role="alert" hidden></p>
+    </section>
+
+    <section id="results" class="stack" aria-labelledby="results-title" hidden>
+      <h2 id="results-title">核对结果</h2>
+      <p id="result-error" class="notice notice--warn" role="status" hidden></p>
+      <div id="result-body" class="stack">
+        <div class="stat-grid" id="summary"></div>
+        <p class="hint" id="summary-note">口径:行数按数据行计数,同一订单号有多行时每行分别计数;已配对行数指配成对的订单行与发票行的对数。金额单位是元,取你选的「金额」列(请选不含税金额),无法识别为数字的金额不计入合计;差额 = 发票金额合计 - 订单金额合计。阻断数、警告数是待复核清单里对应级别的条数,一条订单行可能产生多条。</p>
+        <div class="panel">
+          <div class="panel__head">
+            <h2>待复核清单</h2>
+            <label class="field field--inline">显示
+              <select id="issue-filter">
+                <option value="all">全部(阻断 + 警告)</option>
+                <option value="block">只看阻断</option>
+                <option value="warn">只看警告</option>
+              </select>
+            </label>
+          </div>
+          <div id="issue-list"></div>
+          <details class="ok-details" id="ok-details">
+            <summary id="ok-summary">一致的配对</summary>
+            <div id="ok-list"></div>
+          </details>
+        </div>
+        <div class="panel" aria-labelledby="export-title">
+          <h2 id="export-title">导出</h2>
+          <div class="row">
+            <button type="button" class="btn btn--primary" id="btn-export-review-csv">下载待复核清单 CSV</button>
+            <button type="button" class="btn btn--primary" id="btn-export-review-md">下载待复核清单 Markdown</button>
+            <button type="button" class="btn btn--secondary" id="btn-export-pairs-csv">下载全部配对结果 CSV</button>
+          </div>
+          <p class="hint">导出内容与上方界面使用同一次计算结果;以 = + - @ 开头的字段会加单引号前缀,防止在表格软件里被当成公式。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>本工具只输出待复核清单,不自动付款、不自动申报。匹配依赖订单号字段准确;不识别发票图片。</p>
+  </footer>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

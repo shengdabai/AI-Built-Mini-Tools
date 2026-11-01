@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件完整校验 · 交付清单生成与核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">本机计算 · 文件不上传 · 不联网</span>
+      <p id="today-note" class="muted" hidden></p>
+      <h1>文件完整校验</h1>
+      <p class="muted">交付前生成文件清单。清单记录每个文件的 SHA-256 校验值,用来判断内容是否改变。接收后导入清单,核对缺失、多出和被改动的文件。第一步:在下方选「生成清单」或「核对清单」。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例对比</button>
+      <button id="clear-data" type="button" class="danger">清空清单和忽略列表</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner danger-banner" role="alert" hidden>
+    <strong>未保存:</strong>当前有效状态只在内存中。本机存储可能空间已满、被禁用,或存在尚未完成保全的旧数据。请立即导出当前有效状态 JSON。
+    <div class="row recovery-actions"><button id="export-memory-unsaved" type="button">导出当前有效状态 JSON</button></div>
+  </div>
+  <div id="recovery-warning" class="banner warn-banner" role="alert" hidden>
+    <strong>存档需要恢复:</strong><span id="recovery-message"></span>
+    <div class="row recovery-actions">
+      <button id="download-raw" type="button">下载原始存档</button>
+      <button id="export-memory" type="button">导出当前有效状态 JSON</button>
+    </div>
+  </div>
+  <div id="clear-confirm" class="confirm" hidden>
+    <strong>确认清空?</strong>
+    <span class="muted">已保存的清单和忽略列表会被删除,无法恢复。</span>
+    <div class="row"><button id="clear-yes" type="button" class="danger">确认清空</button><button id="clear-no" type="button">取消</button></div>
+  </div>
+
+  <div id="sample-confirm" class="confirm" hidden>
+    <strong>载入示例会替换当前清单和收到的文件,并保存示例清单。</strong>
+    <span class="muted">当前清单、收到的文件以及自定义的忽略列表都不会保留。建议先导出清单 JSON 备份。</span>
+    <div class="row"><button id="sample-yes" type="button" class="danger">替换为示例</button><button id="sample-no" type="button">取消</button></div>
+  </div>
+
+  <section class="panel" aria-labelledby="ignore-h">
+    <h2 id="ignore-h">忽略列表</h2>
+    <p class="muted">每行一条:文件名(可用 *)、以 / 结尾表示目录、含 / 表示路径模式、# 开头为注释。被忽略的文件不计算哈希,也不参与核对。</p>
+    <label class="field">忽略规则
+      <textarea id="ignore-list" rows="3" spellcheck="false"></textarea>
+    </label>
+    <div class="row"><button id="ignore-reset" type="button">恢复默认</button><span id="ignore-note" class="muted"></span></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="功能">
+    <button role="tab" id="tab-btn-gen" data-tab="gen" aria-selected="true" aria-controls="tab-gen" type="button">生成清单</button>
+    <button role="tab" id="tab-btn-check" data-tab="check" aria-selected="false" aria-controls="tab-check" type="button">核对清单</button>
+  </nav>
+
+  <section id="tab-gen" class="tabpanel" role="tabpanel" aria-labelledby="tab-btn-gen">
+    <div class="panel">
+      <h2>选择要交付的文件夹</h2>
+      <div class="pick-grid">
+        <label class="field">选择文件夹
+          <input id="gen-dir" type="file" webkitdirectory multiple>
+        </label>
+        <div id="gen-drop" class="dropzone" tabindex="0" role="button" aria-label="选择文件夹或拖入文件">或把文件夹、多个文件拖到这里</div>
+      </div>
+      <p class="muted">所选文件夹的名字不计入路径,所以清单可以在文件夹改名后继续使用。</p>
+      <div id="gen-progress" class="progress-box" hidden>
+        <progress id="gen-bar" max="1" value="0"></progress>
+        <p id="gen-progress-text" class="muted" aria-live="polite"></p>
+      </div>
+      <p id="gen-error" class="error" role="alert" hidden></p>
+    </div>
+
+    <div id="gen-result" class="panel" hidden>
+      <h2>清单已生成</h2>
+      <p id="gen-unsaved" class="banner warn-banner" role="status">这份新清单尚未保存,刷新页面会丢失。请先导出清单 JSON 或 CSV;点「用这份清单去核对」会把它保存到本机浏览器。</p>
+      <div id="gen-summary" class="chips"></div>
+      <div id="gen-warnings"></div>
+      <div class="row">
+        <button id="export-json" type="button" class="primary">导出清单 JSON</button>
+        <button id="export-csv" type="button">导出清单 CSV</button>
+        <button id="use-generated" type="button">用这份清单去核对</button>
+      </div>
+      <h3>文件预览</h3>
+      <ul id="gen-list" class="plain-list"></ul>
+    </div>
+  </section>
+
+  <section id="tab-check" class="tabpanel" role="tabpanel" aria-labelledby="tab-btn-check" hidden>
+    <div class="panel">
+      <h2>第一步:导入清单</h2>
+      <div class="pick-grid">
+        <label class="field">清单文件(JSON 或 CSV)
+          <input id="man-file" type="file" accept=".json,.csv,.txt,application/json,text/csv">
+        </label>
+        <label class="field">或粘贴清单内容
+          <textarea id="man-text" rows="3" spellcheck="false" placeholder="粘贴 JSON 或 CSV(路径,大小,sha256,修改时间)"></textarea>
+        </label>
+      </div>
+      <div class="row"><button id="man-parse" type="button">解析粘贴内容</button><button id="export-current" type="button" disabled>导出当前清单 JSON</button></div>
+      <p id="man-error" class="error" role="alert" hidden></p>
+      <p id="man-summary" class="muted"></p>
+      <span id="man-sample-badge" class="badge-sample" hidden>合成示例,不是你的文件</span>
+    </div>
+
+    <div class="panel">
+      <h2>第二步:选择收到的文件夹</h2>
+      <div class="pick-grid">
+        <label class="field">选择文件夹
+          <input id="act-dir" type="file" webkitdirectory multiple>
+        </label>
+        <div id="act-drop" class="dropzone" tabindex="0" role="button" aria-label="选择文件夹或拖入文件">或把文件夹、多个文件拖到这里</div>
+      </div>
+      <div id="act-progress" class="progress-box" hidden>
+        <progress id="act-bar" max="1" value="0"></progress>
+        <p id="act-progress-text" class="muted" aria-live="polite"></p>
+      </div>
+      <p id="act-error" class="error" role="alert" hidden></p>
+      <p id="act-summary" class="muted"></p>
+      <div class="row"><button id="run-check" type="button" class="primary" disabled>开始核对</button></div>
+      <p id="stale-note" class="banner warn-banner" role="status" hidden></p>
+    </div>
+
+    <div id="result" class="panel" hidden>
+      <div class="row between">
+        <h2>核对结果</h2>
+        <span id="sample-badge" class="badge-sample" hidden>合成示例,不是你的文件</span>
+      </div>
+      <p id="verdict" class="verdict" role="status"></p>
+      <div id="summary" class="chips"></div>
+      <div class="filters">
+        <label class="field">状态
+          <select id="filter-status">
+            <option value="attention">需要处理</option>
+            <option value="all">全部</option>
+            <option value="missing">缺失</option>
+            <option value="extra">多出</option>
+            <option value="mismatch">哈希不一致</option>
+            <option value="case">大小写差异</option>
+            <option value="internal">内部错误</option>
+            <option value="name">文件名警告</option>
+            <option value="ok">一致</option>
+          </select>
+        </label>
+        <label class="field">按路径搜索
+          <input id="filter-text" type="search" placeholder="输入路径片段">
+        </label>
+      </div>
+      <p id="row-count" class="muted" aria-live="polite"></p>
+      <ul id="rows" class="rows"></ul>
+      <div class="row">
+        <button id="export-md" type="button" class="primary">导出核对报告 Markdown</button>
+        <button id="export-report-csv" type="button">导出核对报告 CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

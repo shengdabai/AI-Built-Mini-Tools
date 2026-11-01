@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>版本发布说明助手</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <h1>版本发布说明助手</h1>
+      <p class="sub">把 git log(git 的提交记录)按约定式提交(Conventional Commits,一种提交标题写法:类型(范围): 说明)整理成发布说明和更新日志(CHANGELOG)。第一步:点右侧「载入示例」,或把 git log 粘贴到左侧。数据只留在本机,不联网。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button" class="primary">载入示例(原始 git log)</button>
+      <button id="load-oneline" type="button">载入示例(oneline 格式)</button>
+      <button id="load-pretty" type="button">载入示例(pretty 格式)</button>
+    </div>
+  </header>
+
+  <div id="save-warn" class="banner danger" role="alert" hidden>
+    <strong>未保存:浏览器拒绝写入本机存储(空间已满或被禁用)。</strong>
+    <span>关闭或刷新页面后,这次的输入和勾选会丢失。请先在右侧导出 Markdown 备份。</span>
+    <div class="row"><button id="goto-export" type="button">去导出</button></div>
+  </div>
+  <div id="load-note" class="banner recovery" role="alert" hidden>
+    <strong id="load-note-title">本机草稿需要恢复</strong>
+    <span id="load-note-text"></span>
+    <div class="row">
+      <button id="download-raw" type="button">下载原始坏数据</button>
+      <button id="download-current" type="button">导出当前内存草稿</button>
+    </div>
+  </div>
+  <p id="today-note" class="banner" hidden></p>
+  <div id="replace-confirm" class="confirm on-light" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <strong id="replace-title">确认载入合成示例?</strong>
+    <span id="replace-scope" class="muted"></span>
+    <div class="row"><button id="replace-yes" type="button" class="danger">确认用示例替换</button><button id="replace-no" type="button">取消</button></div>
+  </div>
+
+  <main class="workspace">
+    <section class="panel-in" aria-label="输入">
+      <div class="row between">
+        <h2>git log 输入</h2>
+        <button id="clear-data" type="button" class="danger">清空日志、字段和手改内容</button>
+      </div>
+      <div id="clear-confirm" class="confirm" hidden>
+        <strong>确认清空?</strong>
+        <span id="clear-scope" class="muted">输入的日志、版本号、勾选和手改的 Markdown 都会从本机删除,无法恢复。</span>
+        <div class="row"><button id="clear-yes" type="button" class="danger">确认清空日志、字段和手改内容</button><button id="clear-no" type="button">取消</button></div>
+      </div>
+      <label>粘贴 git log 的输出
+        <textarea id="log" spellcheck="false" placeholder="支持三种格式:&#10;1. git log --oneline&#10;2. git log --pretty=format:&quot;%h|%s|%an|%ad&quot;&#10;3. 原始 git log&#10;&#10;点右上角「载入示例」可以先看效果。"></textarea>
+      </label>
+      <p id="log-status" class="status-line" aria-live="polite"></p>
+      <p id="sample-badge-in" class="banner sample-tag" hidden><strong>合成示例,非真实仓库。</strong>下面的日志、仓库地址和版本号都是虚构的;改动日志文本或点「清空」后这个标记消失。</p>
+
+      <div class="fields">
+        <label>仓库地址(可选,用于 #123 链接)
+          <input id="repo" type="url" placeholder="https://github.com/org/repo" autocomplete="off">
+        </label>
+        <label>当前版本(语义化版本 semver,格式 x.y.z)
+          <input id="current" type="text" placeholder="1.2.3" inputmode="numeric" autocomplete="off" aria-describedby="err-current">
+          <span class="field-error" id="err-current" hidden></span>
+        </label>
+        <label>发布版本(留空则用建议)
+          <input id="release" type="text" placeholder="留空" autocomplete="off" aria-describedby="err-release">
+          <span class="field-error" id="err-release" hidden></span>
+        </label>
+        <label>发布日期
+          <input id="date" type="date" aria-describedby="err-date">
+          <span class="field-error" id="err-date" hidden></span>
+        </label>
+      </div>
+
+      <fieldset class="checks">
+        <legend>要不要写进发布说明</legend>
+        <label class="check"><input id="opt-docs" type="checkbox"> 包含 docs(文档)</label>
+        <label class="check"><input id="opt-chore" type="checkbox"> 包含 chore / build / ci / test / style</label>
+        <label class="check"><input id="opt-refactor" type="checkbox"> 包含 refactor / revert</label>
+        <label class="check"><input id="opt-merges" type="checkbox"> 包含 Merge 提交(默认过滤)</label>
+      </fieldset>
+
+      <div>
+        <div class="row between"><h3>条目</h3><span id="items-count" class="muted"></span></div>
+        <p class="muted">勾选「需要用户操作」的条目,会在发布说明末尾单独列出。</p>
+      </div>
+      <div id="items" class="items" aria-label="条目列表"></div>
+      <details id="skipped-box" hidden>
+        <summary id="skipped-summary"></summary>
+        <ul id="skipped" class="skipped"></ul>
+      </details>
+    </section>
+
+    <section class="panel-out" aria-label="输出">
+      <p id="sample-badge-out" class="banner sample-tag" hidden><strong>合成示例,非真实仓库。</strong>右侧的预览、更新日志和导出文件首行都会标注。</p>
+      <div id="version-card" class="version-card" aria-live="polite"></div>
+
+      <div id="stale" class="banner" role="status" hidden>
+        <strong>输入已经改动,你手改过的 Markdown 还是基于旧输入。</strong>
+        <span>确认前不能导出,避免导出内容和界面不一致。</span>
+        <div class="row">
+          <button id="stale-regen" type="button" class="danger">重新生成(丢弃手改)</button>
+          <button id="stale-keep" type="button">保留手改并继续</button>
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="输出视图">
+        <button role="tab" id="tab-preview" data-tab="preview" aria-selected="true" aria-controls="pane-preview" type="button">发布说明预览</button>
+        <button role="tab" id="tab-edit" data-tab="edit" aria-selected="false" aria-controls="pane-edit" type="button">编辑 Markdown</button>
+        <button role="tab" id="tab-changelog" data-tab="changelog" aria-selected="false" aria-controls="pane-changelog" type="button">更新日志(CHANGELOG)片段</button>
+      </div>
+
+      <div id="pane-preview" role="tabpanel" aria-labelledby="tab-preview">
+        <div id="preview" class="release-page"></div>
+      </div>
+      <div id="pane-edit" role="tabpanel" aria-labelledby="tab-edit" hidden>
+        <label>可直接手改。手改后会保存;输入变化时需要你确认是否丢弃。
+          <textarea id="md-edit" spellcheck="false"></textarea>
+        </label>
+        <div class="row"><button id="reset-edit" type="button">恢复为自动生成的内容</button></div>
+        <div id="reset-confirm" class="confirm on-light" role="alertdialog" aria-labelledby="reset-title" hidden>
+          <strong id="reset-title">确认恢复为自动生成?</strong>
+          <span class="muted">你手改的 Markdown 会被丢弃,无法撤销;勾选的「需要用户操作」不受影响。</span>
+          <div class="row"><button id="reset-yes" type="button" class="danger">确认丢弃手改</button><button id="reset-no" type="button">取消</button></div>
+        </div>
+      </div>
+      <div id="pane-changelog" role="tabpanel" aria-labelledby="tab-changelog" hidden>
+        <label>由条目自动生成(更新日志写法 Keep a Changelog),不包含上面的手改
+          <textarea id="changelog" readonly spellcheck="false"></textarea>
+        </label>
+      </div>
+
+      <div class="export-bar">
+        <div class="row">
+          <button id="dl-notes" type="button" class="primary">下载发布说明 Markdown</button>
+          <button id="dl-changelog" type="button">下载更新日志片段 Markdown</button>
+          <button id="copy-notes" type="button">复制发布说明 Markdown</button>
+          <button id="copy-changelog" type="button">复制更新日志片段 Markdown</button>
+        </div>
+        <p id="export-hint" class="hint" aria-live="polite"></p>
+        <p id="copy-msg" class="hint" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

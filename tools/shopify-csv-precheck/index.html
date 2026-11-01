@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>商品 CSV 上架预检</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="nav">
+  <div class="nav-inner">
+    <div class="brand">
+      <h1>商品 CSV 上架预检</h1>
+      <p class="brand-sub">给网店运营在批量上架前自查:按 Shopify(一种网店平台)商品 CSV(逗号分隔的表格文件)的常见导入错误逐行检查。第一步:点右上角「载入合成示例」,或把你的 CSV 粘贴到下面再点「开始预检」。文件只在本机浏览器里处理,不上传。</p>
+    </div>
+    <div class="nav-actions">
+      <button id="load-sample" type="button" class="on-dark">载入合成示例</button>
+      <button id="clear-all" type="button" class="on-dark">清空输入框和预检结果</button>
+    </div>
+  </div>
+</header>
+
+<div id="save-warn" class="banner banner-block" role="alert" hidden>
+  <strong>未保存</strong>
+  <span>浏览器存储不可用或已满,输入内容只存在于当前页面,刷新会丢失。请先到「导出」区下载问题清单或修复后的 CSV。</span>
+</div>
+
+<div id="confirm-clear" class="confirm" role="alertdialog" aria-labelledby="confirm-clear-title" hidden>
+  <div class="confirm-inner">
+    <strong id="confirm-clear-title">确认清空?</strong>
+    <span id="confirm-clear-text">输入框、预检结果和本机保存的内容都会删除,无法恢复。</span>
+    <div class="row">
+      <button id="confirm-yes" type="button" class="danger">确认清空</button>
+      <button id="confirm-no" type="button">取消</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-sample" class="confirm" role="alertdialog" aria-labelledby="confirm-sample-title" hidden>
+  <div class="confirm-inner">
+    <strong id="confirm-sample-title">确认替换?</strong>
+    <span id="confirm-sample-text"></span>
+    <div class="row">
+      <button id="sample-yes" type="button" class="danger">确认替换并载入示例</button>
+      <button id="sample-no" type="button">取消,保留现有内容</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-file" class="confirm" role="alertdialog" aria-labelledby="confirm-file-title" aria-describedby="confirm-file-text" hidden>
+  <div class="confirm-inner">
+    <strong id="confirm-file-title">确认用文件替换?</strong>
+    <span id="confirm-file-text"></span>
+    <div class="row">
+      <button id="file-yes" type="button" class="danger">确认替换并读入文件</button>
+      <button id="file-no" type="button">取消,保留现有内容</button>
+    </div>
+  </div>
+</div>
+
+<main class="page">
+  <section class="panel" aria-labelledby="input-title">
+    <div class="panel-head">
+      <h2 id="input-title">放入 CSV</h2>
+      <span id="save-state" class="muted" role="status"></span>
+      <span id="sample-badge" class="sample-tag" hidden>合成示例:虚构商品,不是真实店铺数据</span>
+    </div>
+    <div class="input-grid">
+      <label class="field">粘贴 CSV 文本
+        <textarea id="csv-input" spellcheck="false" aria-describedby="input-status" placeholder="把 Shopify 商品 CSV 的全部内容粘贴到这里,或在右侧选择本地文件。第一行必须是表头(Handle, Title, Variant Price …)。"></textarea>
+      </label>
+      <div class="input-side">
+        <label class="field">选择本地 CSV 文件(UTF-8)
+          <input id="file-input" type="file" accept=".csv,text/csv,text/plain">
+        </label>
+        <button id="run-check" type="button" class="primary">开始预检</button>
+        <p id="input-status" class="muted" role="status">没有数据时,可以先点右上角「载入示例」看一遍完整流程。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="guide" class="panel guide" aria-labelledby="guide-title">
+    <h2 id="guide-title">怎么用</h2>
+    <ul class="guide-list">
+      <li><strong>预检:</strong>粘贴或选择商品 CSV,点「开始预检」。规则分两级:阻断(导入前必须处理)和警告(建议处理)。</li>
+      <li><strong>几个词:</strong>Handle 是商品在店铺里的唯一网址名;SKU 是库存单位编号;变体是同一商品的不同规格(颜色、尺码)。</li>
+      <li><strong>定位:</strong>点问题清单里的任意一条,预览表格会滚动到对应单元格并高亮。</li>
+      <li><strong>修复与导出:</strong>「应用安全修复」只做无歧义的改动;之后下载修复后的 CSV 或问题清单。</li>
+    </ul>
+    <p class="muted">这不是 Shopify 官方校验器,通过预检也不保证一定能导入成功。</p>
+  </section>
+
+  <section id="result" aria-labelledby="result-title" hidden>
+    <h2 id="result-title">预检结果</h2>
+    <div id="verdict" class="verdict" role="status"></div>
+    <dl id="stats" class="stats" aria-label="统计"></dl>
+    <details class="stat-notes">
+      <summary>统计口径(单位、计数条件)</summary>
+      <ul id="stat-notes" class="note-list"></ul>
+    </details>
+
+    <div class="split">
+      <section class="panel" aria-labelledby="issues-title">
+        <div class="panel-head">
+          <h2 id="issues-title">问题清单</h2>
+          <div class="filter" role="group" aria-label="按级别筛选">
+            <button type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button type="button" data-filter="block" aria-pressed="false">阻断</button>
+            <button type="button" data-filter="warn" aria-pressed="false">警告</button>
+          </div>
+        </div>
+        <div id="issue-list" class="issue-list"></div>
+      </section>
+
+      <section class="panel panel-wide" aria-labelledby="preview-title">
+        <div class="panel-head">
+          <h2 id="preview-title">数据预览</h2>
+          <span id="preview-note" class="muted"></span>
+        </div>
+        <div id="preview" class="table-wrap" tabindex="0" role="region" aria-label="数据预览表格,可横向滚动"></div>
+      </section>
+    </div>
+
+    <div class="split split-even">
+      <section class="panel" aria-labelledby="fix-title">
+        <h2 id="fix-title">安全修复</h2>
+        <p class="muted">只做没有歧义的四件事:去掉单元格首尾空白;Handle 转小写并把空白换成连字符;Published 的 true/false 统一成大写;删除整行为空的行。非法价格、重复 SKU 等不会被改动。</p>
+        <p id="fix-summary" class="fix-summary" role="status"></p>
+        <div class="row">
+          <button id="apply-fix" type="button" class="primary">应用安全修复到预览数据</button>
+        </div>
+        <p id="fix-applied" class="muted" role="status"></p>
+        <p id="fix-unsaved" class="fix-unsaved" role="status" hidden><strong>修复结果尚未保存:</strong>它只在当前页面的内存里,刷新后会恢复成原文。请先下载修复后的 CSV。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="export-title">
+        <h2 id="export-title">导出</h2>
+        <p id="export-note" class="muted"></p>
+        <div class="row">
+          <button id="export-csv" type="button" class="primary">下载预览中的商品 CSV</button>
+          <button id="export-issues-csv" type="button">下载问题清单 CSV</button>
+          <button id="export-issues-md" type="button">下载问题清单 Markdown</button>
+        </div>
+        <p class="muted">导出的商品 CSV 里,以 = 或 @ 开头的单元格,以及以 + 或 - 开头且长度大于 1 的单元格(包括 -3、+0012 这样的数字,例如负库存),都会加一个单引号前缀,防止表格软件把它当公式执行。所以带负号的数值导出后会变成文本,导入平台前请自行留意。</p>
+        <pre id="md-preview" class="md-preview" aria-label="问题清单 Markdown 预览"></pre>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

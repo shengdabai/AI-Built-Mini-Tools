@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>因果复盘链</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>因果复盘链</h1>
+    <p class="tagline">把一件事写成「因为 → 所以 → 然后」的因果链条,在平静的复盘时刻回看,不在情绪高点谈。第一步:点右上角「载入示例」,或在「复盘」页填“谁”和“事件”。</p>
+  </div>
+  <div class="top-actions">
+    <span class="today" id="today-label"></span>
+    <button type="button" id="load-sample" class="btn">载入示例</button>
+    <button type="button" id="import-btn-top" class="btn" aria-describedby="import-msg">导入 JSON 备份</button>
+    <button type="button" id="clear-all" class="btn btn-quiet">清空全部复盘与设置</button>
+    <input type="file" id="import-file" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+  </div>
+</header>
+
+<div id="save-alert" class="banner banner-danger" role="alert" hidden>
+  <strong id="save-alert-title">未保存</strong>
+  <span id="save-alert-text"></span>
+  <button type="button" class="btn btn-small" id="save-alert-export">导出当前内存中的全部复盘 JSON 备份</button>
+  <button type="button" class="btn btn-small" data-go-export>去导出页</button>
+</div>
+<div id="confirm-box" class="banner banner-warn" role="alertdialog" aria-labelledby="confirm-text" hidden>
+  <span id="confirm-text"></span>
+  <button type="button" class="btn btn-danger btn-small" id="confirm-yes">确认</button>
+  <button type="button" class="btn btn-small" id="confirm-no">取消</button>
+</div>
+<div id="sample-note" class="banner banner-info" hidden>当前含「合成示例」数据,孩子名为占位;点「清空数据」后再录入你自己的复盘。</div>
+<p id="status-msg" class="status-msg" role="status" aria-live="polite"></p>
+
+<nav class="tabs" role="tablist" aria-label="功能">
+  <button type="button" class="tab" role="tab" data-tab="review" aria-selected="true">复盘</button>
+  <button type="button" class="tab" role="tab" data-tab="browse" aria-selected="false">回看</button>
+  <button type="button" class="tab" role="tab" data-tab="stats" aria-selected="false">统计</button>
+  <button type="button" class="tab" role="tab" data-tab="export" aria-selected="false">导出与设置</button>
+</nav>
+
+<main>
+  <section id="tab-review" class="panel" data-panel="review">
+    <div class="grid-review">
+      <aside class="card" aria-labelledby="pending-h">
+        <h2 id="pending-h">今天的事</h2>
+        <p class="muted" id="slot-line"></p>
+        <ul id="pending-list" class="plain-list"></ul>
+        <p id="pending-empty" class="muted" hidden>今天没有待复盘的条目。</p>
+      </aside>
+
+      <form id="entry-form" class="card" novalidate aria-labelledby="form-h">
+        <h2 id="form-h">新建复盘</h2>
+        <div class="row">
+          <label class="field">日期<input type="date" id="f-date" required aria-describedby="form-error"></label>
+          <label class="field">谁<input type="text" id="f-who" list="who-list" placeholder="例如 A 娃,或 自己" required aria-describedby="form-error"></label>
+          <datalist id="who-list"></datalist>
+        </div>
+        <label class="field">事件(一句话)<input type="text" id="f-event" placeholder="例如 周日晚上才开始写作业" required aria-describedby="form-error"></label>
+        <fieldset class="field">
+          <legend>谁提出的这条链</legend>
+          <label class="choice"><input type="radio" name="f-proposer" value="child"> 孩子自己推演</label>
+          <label class="choice"><input type="radio" name="f-proposer" value="parent" checked> 家长</label>
+        </fieldset>
+        <fieldset class="field">
+          <legend>录入时的情绪</legend>
+          <label class="choice"><input type="radio" name="f-mood" value="calm" checked> 平静</label>
+          <label class="choice"><input type="radio" name="f-mood" value="upset"> 有情绪</label>
+        </fieldset>
+        <fieldset class="field">
+          <legend>链条(正式复盘需 2—6 级,每级一句;草稿可以暂不填写链条)</legend>
+          <div id="levels"></div>
+          <div class="row">
+            <button type="button" class="btn btn-small" id="add-level">增加一级</button>
+            <button type="button" class="btn btn-small btn-quiet" id="remove-level">删除最后一级</button>
+          </div>
+        </fieldset>
+        <fieldset class="field">
+          <legend>标签(给这件事分类,可在“导出与设置”里改)</legend>
+          <div id="f-tags"></div>
+        </fieldset>
+        <label class="field">关联旧条目(同一事件再次发生时手动选)
+          <select id="f-prev"></select>
+        </label>
+        <ul id="issues" class="issues" aria-live="polite"></ul>
+        <p id="form-error" class="form-error" role="alert" tabindex="-1" hidden></p>
+        <div class="row">
+          <button type="submit" class="btn btn-primary" id="save-btn">保存复盘</button>
+          <button type="button" class="btn" id="save-draft-btn">保存为草稿</button>
+          <button type="button" class="btn btn-quiet" id="cancel-edit" hidden>取消编辑</button>
+        </div>
+      </form>
+
+      <section class="card live" aria-labelledby="live-h">
+        <h2 id="live-h">链条预览</h2>
+        <div id="preview-chain"></div>
+        <div id="preview-prev" class="prev-box" hidden></div>
+        <p class="legend"><span class="swatch swatch-child"></span>孩子提出 <span class="swatch swatch-parent"></span>家长提出</p>
+      </section>
+    </div>
+  </section>
+
+  <section id="tab-browse" class="panel" data-panel="browse" hidden>
+    <div class="card">
+      <h2>回看</h2>
+      <div class="row filters">
+        <label class="field">孩子 / 人<select id="q-who"></select></label>
+        <label class="field">标签<select id="q-tag"></select></label>
+        <label class="field grow">关键词<input type="search" id="q-text" placeholder="事件、链条、标签里的字"></label>
+      </div>
+      <p class="muted" id="browse-count"></p>
+    </div>
+    <div id="browse-list" class="entry-list"></div>
+  </section>
+
+  <section id="tab-stats" class="panel" data-panel="stats" hidden>
+    <div class="grid-stats">
+      <div class="card">
+        <h2>孩子自己推演的比例</h2>
+        <p class="muted">比例 = 当周孩子自己推演的已复盘条数 ÷ 当周已复盘条数(不含草稿与「自己」的条目),近 8 周,每周从截止日往前数 7 天。当周没有记录的周不画点,折线在那里断开并标“无记录”。</p>
+        <div id="ratio-chart" class="chart"></div>
+        <ul id="ratio-list" class="plain-list"></ul>
+      </div>
+      <div class="card">
+        <h2>标签分布</h2>
+        <p class="muted">统计全部条目(含草稿和「自己」的条目),一条可计入多个标签;数字单位是“条”,最长的条代表数量最多的标签。</p>
+        <div id="tag-bars" class="bars"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-export" class="panel" data-panel="export" hidden>
+    <div class="grid-export">
+      <div class="card">
+        <h2>导出</h2>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="export-md">导出 Markdown 复盘册(按月)</button>
+          <button type="button" class="btn" id="export-csv">导出条目 CSV</button>
+          <button type="button" class="btn" id="export-json">导出全部条目与设置 JSON 备份</button>
+        </div>
+        <p class="muted" id="export-hint"></p>
+        <h3>Markdown 预览</h3>
+        <pre id="md-preview" class="preview"></pre>
+      </div>
+      <div class="card">
+        <h2>导入 JSON 备份</h2>
+        <div class="row"><button type="button" class="btn" id="import-btn" aria-describedby="import-msg">选择 JSON 备份文件导入</button></div>
+        <p class="muted">导入先校验整份文件,通过后写明数量并请你确认,确认后才写入;有错就整份拒绝。</p>
+        <p id="import-msg" class="muted" role="status"></p>
+      </div>
+      <form class="card" id="config-form" novalidate>
+        <h2>设置</h2>
+        <label class="field">远期词(像“以后、长大”这类离今天很远、孩子看不见的词;逗号或换行分隔)<textarea id="c-far" rows="3"></textarea></label>
+        <label class="field">标签(逗号或换行分隔)<textarea id="c-tags" rows="2"></textarea></label>
+        <div class="row">
+          <label class="field">时段一<input type="text" id="c-s1-label"></label>
+          <label class="field">时间<input type="time" id="c-s1-time"></label>
+        </div>
+        <div class="row">
+          <label class="field">时段二<input type="text" id="c-s2-label"></label>
+          <label class="field">时间<input type="time" id="c-s2-time"></label>
+        </div>
+        <p id="config-error" class="form-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">保存设置</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>数据只存在本机浏览器,不联网。本工具不评分孩子、不给教育建议,不能替代真实对话。</p>
+</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

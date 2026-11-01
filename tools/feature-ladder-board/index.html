@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>功能阶梯取舍板</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>功能阶梯取舍板</h1>
+      <p class="lede">把功能按门 1 自用、门 2 他人可用、门 3 付费排成阶梯,用规则检查逼自己砍掉现在不该做的。第一步:点「载入示例」看一个完整例子,或在页面下方「添加功能」里录入第一个功能。</p>
+    </div>
+    <div class="top-actions">
+      <span id="save-state" class="save-state" role="status">尚无数据</span>
+      <button type="button" id="load-sample" class="btn btn-on-dark">载入示例</button>
+      <button type="button" id="import-btn" class="btn btn-on-dark">导入 JSON</button>
+      <button type="button" id="clear-data" class="btn btn-on-dark">清空数据</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div id="storage-banner" class="banner banner-danger" role="alert" hidden>
+    <p><strong>未保存。</strong>浏览器拒绝写入本地存储(空间已满或被禁用),当前改动只存在于这个页面,刷新就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" id="banner-export" class="btn">导出 JSON 备份(当前页面内存里的全部已保存功能)</button>
+  </div>
+  <div id="confirm-area" class="banner banner-confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" id="confirm-yes" class="btn btn-primary">确认</button>
+      <button type="button" id="confirm-no" class="btn">取消</button>
+    </div>
+  </div>
+  <p id="notice" class="notice" role="status" hidden></p>
+
+  <section class="summary" aria-label="项目概况">
+    <div class="field summary-name">
+      <label for="project-name">项目名</label>
+      <input id="project-name" type="text" autocomplete="off" placeholder="例如:课后反馈工具">
+    </div>
+    <ul id="stats" class="stats"></ul>
+  </section>
+
+  <section aria-labelledby="board-title">
+    <h2 id="board-title" class="section-title">阶梯视图</h2>
+    <div id="board" class="board"></div>
+  </section>
+
+  <div class="lower">
+    <div class="lower-col">
+      <section class="panel" aria-labelledby="form-title">
+        <h2 id="form-title">添加功能</h2>
+        <form id="feature-form" novalidate>
+          <div class="field">
+            <label for="f-name">功能名</label>
+            <input id="f-name" type="text" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="f-task">一句话用户任务(谁在什么情境完成什么)</label>
+            <textarea id="f-task" rows="2"></textarea>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="f-gate">所属门</label>
+              <select id="f-gate"><option value="1">门 1 自用</option><option value="2">门 2 他人可用</option><option value="3">门 3 付费</option></select></div>
+            <div class="field"><label for="f-moscow">优先级(MoSCoW 四级法)</label>
+              <select id="f-moscow"><option value="must">必须做 Must</option><option value="should" selected>应该做 Should</option><option value="could">可以做 Could</option><option value="wont">本次不做 Won't</option></select></div>
+            <div class="field"><label for="f-hours">预计小时</label>
+              <input id="f-hours" type="text" inputmode="decimal" autocomplete="off" placeholder="例如:4"></div>
+            <div class="field"><label for="f-layer">验证层(用哪种测试证明它能用)</label>
+              <select id="f-layer"><option value="">未定</option><option value="unit">单测</option><option value="integration">集成</option><option value="e2e">端到端 E2E(模拟用户走完整个流程)</option><option value="screenshot">截图</option><option value="real">真实依赖</option></select></div>
+            <div class="field"><label for="f-status">状态</label>
+              <select id="f-status"><option value="todo">未做</option><option value="doing">做中</option><option value="done">已做</option><option value="cut">已砍</option></select></div>
+          </div>
+          <fieldset class="field deps">
+            <legend>依赖功能</legend>
+            <div id="f-deps" class="deps-list"></div>
+          </fieldset>
+          <p id="form-error" class="form-error" role="alert" hidden></p>
+          <div class="row">
+            <button type="submit" id="f-submit" class="btn btn-primary">添加功能</button>
+            <button type="button" id="f-cancel" class="btn" hidden>清空表单</button>
+          </div>
+          <p id="draft-note" class="hint draft-note" role="status" hidden></p>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="ev-title">
+        <h2 id="ev-title">过门证据</h2>
+        <p class="hint">证据靠你自己如实填写,留空就是「未过门」。上一门没过时,下一门的功能会标灰。</p>
+        <div class="field">
+          <div class="ev-head"><label for="ev-1">门 1 自用</label><span id="evchip-1" class="chip"></span></div>
+          <p class="hint">usage-log(使用记录表)至少 3 条真实使用记录</p>
+          <textarea id="ev-1" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <div class="ev-head"><label for="ev-2">门 2 他人可用</label><span id="evchip-2" class="chip"></span></div>
+          <p class="hint">1 个非本人用户完成了任务 + 1 条反馈</p>
+          <textarea id="ev-2" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <div class="ev-head"><label for="ev-3">门 3 付费</label><span id="evchip-3" class="chip"></span></div>
+          <p class="hint">有人说出愿意付多少钱买</p>
+          <textarea id="ev-3" rows="3"></textarea>
+        </div>
+      </section>
+    </div>
+
+    <div class="lower-col">
+      <section class="panel" aria-labelledby="check-title">
+        <h2 id="check-title">规则检查</h2>
+        <ul id="issues" class="issues"></ul>
+        <details class="rules">
+          <summary>规则清单与门 1 禁用关键词表</summary>
+          <p class="hint">阻断:Must(必须做)超过 7 个;Must 没有验证层;门 1 功能含关键词;依赖环;依赖了已砍或 Won't 功能。警告:Won't 为空;Could(可以做)多于 Must(必须做)+ Should(应该做);单功能超过 16 小时;门 3 排在门 2 之前。</p>
+          <div class="field">
+            <label for="kw">门 1 禁用关键词(逗号或换行分隔)</label>
+            <textarea id="kw" rows="2"></textarea>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="export-title">
+        <h2 id="export-title">导出</h2>
+        <div class="row">
+          <button type="button" id="export-md" class="btn btn-primary">下载 PRD 片段 Markdown(.md)</button>
+          <button type="button" id="export-csv" class="btn">下载功能表 CSV(.csv)</button>
+          <button type="button" id="export-json" class="btn">下载 JSON 备份(全部功能与证据)</button>
+        </div>
+        <p id="export-note" class="hint"></p>
+        <h3>PRD(产品需求文档)片段预览</h3>
+        <pre id="md-preview" class="preview" tabindex="0"></pre>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>注意力账本</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>注意力账本</h1>
+    <p>这是一本时间账:把一天里做过的事按时间段记下来,看你的黄金时段(自己定的、一天里注意力最好的时间)给了生产、学习还是消费。第一步:点「载入合成示例」看完整的账,或在下面「记一段时间」填第一段。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="load-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-backup">导出 JSON 备份(可重新导入的数据文件)</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部记录、备注和黄金时段设置</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空?</strong><span id="clear-scope"></span>此操作不能撤销,建议先导出 JSON 备份。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="replace-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <p id="replace-title"><strong>载入合成示例会替换你现有的数据:</strong><span id="replace-scope"></span>。此操作不能撤销,建议先导出 JSON 备份。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-replace-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-replace-no">取消</button>
+    </div>
+  </div>
+  <div id="import-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="import-title" hidden>
+    <p id="import-title"><strong>备份文件通过校验。</strong><span id="import-scope"></span></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-import-yes">确认导入并替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-import-no">取消,保留现有数据</button>
+    </div>
+  </div>
+  <div id="note-switch-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="note-switch-title" hidden>
+    <p id="note-switch-title"></p>
+    <div class="row">
+      <button type="button" class="btn btn--primary" id="btn-note-switch-save">保存备注后切换</button>
+      <button type="button" class="btn btn--danger" id="btn-note-switch-discard">放弃修改并切换</button>
+      <button type="button" class="btn btn--secondary" id="btn-note-switch-cancel">取消,留在当前日期</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出当前内存里的全部有效数据(JSON 备份)</button>
+  </div>
+  <div id="export-block" class="notice notice--warn" role="status" hidden></div>
+  <div id="today-banner" class="notice" hidden></div>
+  <div id="sample-badge" class="notice notice--warn" hidden><strong>当前数据含合成示例,不是真实记录。</strong>导出的 JSON、CSV 和周报里也会标注。清空或导入真实备份后这条提示消失。</div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden>
+    <p id="import-error-text"></p>
+    <button type="button" class="btn btn--secondary" id="btn-import-error-close">知道了</button>
+  </div>
+  <p id="flash" class="notice notice--ok" role="status" hidden></p>
+
+  <section class="toolbar" aria-label="查看日期与黄金时段">
+    <div class="field">
+      <label for="view-date">查看日期</label>
+      <div class="row row--tight">
+        <button type="button" class="btn btn--secondary" id="date-prev" aria-label="前一天">前一天</button>
+        <input type="date" id="view-date">
+        <button type="button" class="btn btn--secondary" id="date-next" aria-label="后一天">后一天</button>
+        <button type="button" class="btn btn--secondary" id="date-today">回到今天</button>
+      </div>
+    </div>
+    <div class="field">
+      <span class="field__label" id="golden-label">黄金时段(你一天里注意力最好的时间)</span>
+      <div class="row row--tight" role="group" aria-labelledby="golden-label">
+        <input type="time" id="golden-start" aria-label="黄金时段开始">
+        <span aria-hidden="true">至</span>
+        <input type="time" id="golden-end" aria-label="黄金时段结束">
+      </div>
+      <p class="field-error" id="err-golden" hidden></p>
+    </div>
+  </section>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="day" aria-current="page">一天的账</button>
+    <button type="button" class="tab" data-view="range">周与月</button>
+    <button type="button" class="tab" data-view="review">复盘与导出</button>
+  </nav>
+
+  <main>
+    <section id="view-day" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有任何记录</h2>
+        <p>先点「载入示例」看一遍完整的账,或者在下面的表单里记下今天的第一段时间。</p>
+        <div class="row"><button type="button" class="btn btn--primary" id="load-sample-2">载入合成示例</button><button type="button" class="btn btn--secondary" id="btn-import-2">导入 JSON 备份(恢复以前导出的数据)</button></div>
+      </div>
+
+      <div class="grid-day">
+        <form id="entry-form" class="panel" novalidate aria-labelledby="form-title">
+          <h2 id="form-title">记一段时间</h2>
+          <div id="form-errors" class="notice notice--danger" role="alert" hidden></div>
+          <div class="form-grid">
+            <div class="field"><label for="f-date">日期</label><input type="date" id="f-date" required><p class="field-error" id="err-date" hidden></p></div>
+            <div class="field"><label for="f-start">开始</label><input type="time" id="f-start" required><p class="field-error" id="err-start" hidden></p></div>
+            <div class="field"><label for="f-end">结束</label><input type="time" id="f-end" required><p class="field-error" id="err-end" hidden></p><label class="check"><input type="checkbox" id="f-midnight"> 结束于午夜 24:00</label></div>
+            <div class="field field--wide"><label for="f-what">做了什么</label><input type="text" id="f-what" maxlength="200" autocomplete="off" required><p class="field-error" id="err-what" hidden></p></div>
+            <div class="field"><label for="f-group">大类</label>
+              <select id="f-group">
+                <option value="prod">生产</option>
+                <option value="learn">学习</option>
+                <option value="consume">消费</option>
+                <option value="chore">杂务</option>
+                <option value="rest">休息</option>
+              </select><p class="field-error" id="err-group" hidden></p>
+            </div>
+            <div class="field"><label for="f-label">自定义类别名(可选)</label><input type="text" id="f-label" maxlength="30" autocomplete="off" placeholder="如:写作、短视频"><p class="field-error" id="err-label" hidden></p></div>
+          </div>
+          <label class="check"><input type="checkbox" id="f-overnight"> 这一段跨过午夜(拆成两天保存)</label>
+          <div class="row">
+            <button type="submit" class="btn btn--primary" id="f-submit">保存这一段</button>
+            <button type="button" class="btn btn--secondary" id="f-cancel" hidden>取消编辑</button>
+            <button type="button" class="btn btn--secondary" id="f-error-demo">填入重叠的错误示例(用来看保存被阻止)</button>
+          </div>
+          <p id="draft-note" class="notice notice--warn" hidden></p>
+          <p class="hint">保存前会检查:结束要晚于开始;同一天的时间段不能相交(首尾相接不算)。</p>
+        </form>
+
+        <div class="stack-col">
+          <section class="panel" aria-labelledby="day-title">
+            <h2 id="day-title">这一天</h2>
+            <p id="day-headline" class="headline"></p>
+            <div id="day-metrics" class="metrics"></div>
+            <div id="timeline" class="timeline" role="img"></div>
+            <ul id="legend" class="legend" aria-label="类别图例"></ul>
+            <details class="caliber"><summary>这些数字怎么算的</summary>
+              <p>占比的分母是这一天已记录的总分钟数;没有记录的时间不计入。生产 + 学习占比 = (生产 + 学习分钟) ÷ 已记录总分钟。黄金时段利用率 = 黄金时段内的生产 + 学习分钟 ÷ 黄金时段总分钟(默认 09:00–12:00 共 180 分钟,可在上方改)。没有记录或分母为 0 时显示 0%。</p>
+            </details>
+          </section>
+          <section class="panel" aria-labelledby="golden-title">
+            <h2 id="golden-title">黄金注意力给了谁</h2>
+            <p id="golden-text" class="headline"></p>
+            <div id="golden-stack" class="stack-bar" role="img"></div>
+            <ul id="golden-legend" class="legend"></ul>
+          </section>
+        </div>
+      </div>
+
+      <section class="panel" aria-labelledby="list-title">
+        <h2 id="list-title">这一天的时间段</h2>
+        <div class="table-wrap">
+          <table id="entry-table" class="table">
+            <thead><tr><th>时间</th><th>时长</th><th>大类</th><th>做了什么</th><th>操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="entry-empty" class="hint" hidden>这一天还没有记录。</p>
+      </section>
+    </section>
+
+    <section id="view-range" class="view" hidden>
+      <section class="panel" aria-labelledby="range-title">
+        <div class="row row--between">
+          <h2 id="range-title">周与月</h2>
+          <div class="seg" role="group" aria-label="统计区间">
+            <button type="button" class="btn btn--secondary" data-range="7" aria-pressed="true">最近 7 天</button>
+            <button type="button" class="btn btn--secondary" data-range="30" aria-pressed="false">最近 30 天</button>
+          </div>
+        </div>
+        <p id="range-sub" class="hint"></p>
+        <div id="range-metrics" class="metrics"></div>
+        <details class="caliber"><summary>这些数字怎么算的</summary>
+          <p>区间是以「查看日期」为最后一天往前数的 7 天或 30 天,不是自然周或自然月;对比的是紧邻的上一个等长区间。占比的分母是区间内已记录的总分钟数。黄金时段平均利用率只统计有记录的天,每天先算「黄金时段内生产 + 学习 ÷ 黄金时段总分钟」再取平均。连续天数要求每天都有记录且利用率 ≥ 60%,中间缺一天就从头数。上一期没有任何记录时,上一期占比显示 0%,变化即本期占比。</p>
+        </details>
+      </section>
+      <section class="panel" aria-labelledby="share-title">
+        <h2 id="share-title">类别占比:本期对比上一期</h2>
+        <div class="table-wrap"><table id="share-table" class="table">
+          <thead><tr><th>大类</th><th>本期分钟</th><th>本期占比</th><th>上一期占比</th><th>变化</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+      <section class="panel" aria-labelledby="daily-title">
+        <h2 id="daily-title">每天的生产与学习</h2>
+        <div class="table-wrap"><table id="daily-table" class="table">
+          <thead><tr><th>日期</th><th>生产+学习</th><th>黄金时段利用率</th><th>最大的一笔</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+    </section>
+
+    <section id="view-review" class="view" hidden>
+      <section class="panel" aria-labelledby="review-title">
+        <h2 id="review-title">每天一句复盘</h2>
+        <p id="review-auto" class="headline"></p>
+        <div class="field">
+          <label for="note-input">我的一句话备注(最多 500 字)</label>
+          <textarea id="note-input" rows="3" maxlength="500"></textarea>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="note-save">保存备注</button>
+          <span id="note-state" class="hint"></span>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="export-title">
+        <h2 id="export-title">周报与导出</h2>
+        <p class="hint">周报覆盖「查看日期」往前 7 天(含查看日期当天)。导出内容与下方预览一致;CSV 和 JSON 含全部日期。</p>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="export-md">导出周报 Markdown(最近 7 天)</button>
+          <button type="button" class="btn btn--secondary" id="export-csv">导出全部记录 CSV(表格文件)</button>
+          <button type="button" class="btn btn--secondary" id="export-json">导出 JSON 备份(全部记录和备注)</button>
+        </div>
+        <p id="export-hint" class="hint" hidden></p>
+        <pre id="md-preview" class="preview" tabindex="0" aria-label="周报预览"></pre>
+      </section>
+    </section>
+  </main>
+  <footer class="foot">
+    <p>手填本身会消耗注意力;这个工具不自动采集、不评分、不联网。</p>
+  </footer>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

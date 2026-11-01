@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本机笔记全文检索</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">自用工具 · 只读本机文件 · 不联网</span>
+      <h1>本机笔记全文检索</h1>
+      <p class="muted">给本机的 .md / .txt 笔记建全文索引(记录每个词出现在哪个段落,方便快速搜索),按段落搜索。第一步:点「选择笔记文件夹」,或点右上角「载入示例(合成)」。文件不会被修改或上传。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例(合成)</button>
+    </div>
+  </header>
+
+  <div id="warnings" class="warnings" role="alert" aria-live="assertive"></div>
+
+  <div id="confirm" class="confirm" hidden role="alertdialog" aria-labelledby="confirm-text">
+    <strong id="confirm-text"></strong>
+    <div class="row"><button id="confirm-yes" type="button" class="danger">确认</button><button id="confirm-no" type="button">取消</button></div>
+  </div>
+
+  <div class="workspace">
+    <aside class="side">
+      <section class="panel" aria-labelledby="lib-h">
+        <h2 id="lib-h">笔记库</h2>
+        <div class="stack">
+          <div class="row">
+            <button type="button" id="btn-pick-folder">选择笔记文件夹</button>
+            <input id="pick-folder" class="sr-input" type="file" webkitdirectory multiple tabindex="-1" aria-hidden="true">
+            <button type="button" id="btn-pick-files">选择笔记文件</button>
+            <input id="pick-files" class="sr-input" type="file" multiple tabindex="-1" aria-hidden="true">
+          </div>
+          <div id="dropzone" class="dropzone" tabindex="0">也可以把多个文件拖到这里</div>
+          <label>额外后缀(默认只读 .md .txt .markdown)
+            <input id="ext-extra" type="text" placeholder="例如 .org .rst" autocomplete="off">
+          </label>
+          <p id="ext-note" class="muted" hidden></p>
+          <div id="progress-box" hidden>
+            <progress id="progress" max="1" value="0"></progress>
+            <p id="progress-text" class="muted"></p>
+          </div>
+          <p id="selection-note" class="muted"></p>
+          <p id="note-problems" class="warning" role="status" hidden></p>
+          <dl id="lib-summary" class="summary">
+            <div><dt>文件</dt><dd id="s-files">0</dd></div>
+            <div><dt>总字数</dt><dd id="s-chars">0</dd></div>
+            <div><dt>段落</dt><dd id="s-paras">0</dd></div>
+            <div><dt>词项</dt><dd id="s-terms">0</dd></div>
+          </dl>
+          <p id="lib-meta" class="muted">还没有索引。选择文件夹,或点右上角「载入示例」。</p>
+          <p id="cache-status" class="muted"></p>
+          <div class="row">
+            <button id="export-csv" type="button" disabled>导出索引统计 CSV</button>
+            <button id="clear-cache" type="button" class="danger" disabled>清除索引与缓存</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="co-h">
+        <h2 id="co-h">共现词</h2>
+        <form id="co-form" class="stack">
+          <label>关键词
+            <input id="co-term" type="text" placeholder="例如 复习" autocomplete="off">
+          </label>
+          <button type="submit" id="co-go" disabled>统计同段落共现词(前 20)</button>
+        </form>
+        <p id="co-note" class="muted"></p>
+        <ol id="co-list" class="chips"></ol>
+        <details class="stop-box">
+          <summary>停用词设置</summary>
+          <label>以空格、逗号或换行分隔
+            <textarea id="stopwords" spellcheck="false"></textarea>
+          </label>
+          <div class="row">
+            <button id="save-stop" type="button">保存停用词</button>
+            <button id="reset-stop" type="button">恢复默认</button>
+          </div>
+          <p class="muted">停用词是不参与统计的词。例如加入「的」,所有含「的」的两字组合也会被排除。</p>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="rc-h">
+        <h2 id="rc-h">最近修改</h2>
+        <p id="recent-empty" class="muted">载入笔记库后显示最近修改的 20 个文件。</p>
+        <ol id="recent-list" class="recent"></ol>
+      </section>
+    </aside>
+
+    <main class="main">
+      <section class="panel" aria-labelledby="search-h">
+        <h2 id="search-h">搜索</h2>
+        <form id="search-form" class="stack">
+          <div class="search-row">
+            <input id="q" type="search" placeholder='复习 "间隔重复" -咖啡 path:读书/' aria-label="搜索语句" autocomplete="off" disabled>
+            <button id="do-search" type="submit" class="primary" disabled>搜索</button>
+          </div>
+          <p class="muted">空格 = 同时包含;"引号" = 连续短语;-词 = 排除;path:日记/ = 路径前缀(相对所选文件夹)。</p>
+        </form>
+        <div class="row between result-bar">
+          <p id="result-meta" class="muted" aria-live="polite">载入笔记库后即可搜索。</p>
+          <div class="row">
+            <button id="export-md" type="button" disabled>导出搜索结果 Markdown</button>
+          </div>
+        </div>
+        <details id="rank-box" class="rank-box" hidden>
+          <summary>结果是怎么排序的</summary>
+          <p class="muted">按命中密度排序,标题或文件名命中的段落加权。密度 = 命中次数 ÷ max(段落字数, 40) × 100;标题或文件名命中再加 5 分;分数相同时按路径、段落号排。</p>
+        </details>
+        <p id="export-hint" class="muted" hidden></p>
+        <div id="results" class="results"></div>
+        <button id="more" type="button" hidden>显示更多</button>
+      </section>
+    </main>
+  </div>
+  <p class="footer muted">示例库为合成内容;真实笔记只在本页内存与浏览器 IndexedDB 里,不上传。</p>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI 单任务投入账本</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="hero">
+  <div><p class="kicker">本机记录 · 不联网</p><h1>AI 单任务投入账本</h1><p>把人工时间、返工、API 费用和订阅额度分开记录。第一步：新增一个已做过的任务，写清可观察的验收条件。</p></div>
+  <div class="toolbar" role="group" aria-label="数据操作">
+    <button id="load-sample" type="button">载入合成示例</button><button id="export-json" type="button">导出 JSON 备份</button>
+    <button id="pick-import" type="button">导入 JSON 备份</button><input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" tabindex="-1">
+    <button id="clear-all" class="danger" type="button">清空全部任务</button>
+  </div>
+</header>
+<main>
+  <p id="today-banner" class="banner" hidden></p>
+  <p id="sample-banner" class="banner warning" hidden>账本中含合成示例。每条任务会单独标记身份，导出文件会保留该标记。</p>
+  <div id="storage-warning" class="banner danger" hidden><p id="storage-warning-text"></p><div class="actions"><button id="export-corrupt" class="danger" type="button" hidden>下载损坏的原始存储文本</button><button id="export-recovery" class="danger" type="button">导出当前内存与有效草稿 JSON 备份</button></div></div>
+  <p id="status" class="banner" role="status" hidden></p>
+  <section id="confirm-panel" class="panel confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p><div class="actions"><button id="confirm-yes" class="danger" type="button">确认</button><button id="confirm-no" type="button">取消</button></div>
+  </section>
+  <section id="import-panel" class="panel" hidden>
+    <h2>确认导入 JSON 备份</h2><p id="import-preview"></p><div class="actions"><button id="import-confirm" type="button">确认替换当前数据</button><button id="import-cancel" type="button">取消导入</button></div>
+  </section>
+
+  <section class="stats" aria-label="账本总览">
+    <article><span>本人 / 全部任务</span><strong id="stat-tasks">0 / 0</strong><small>合成示例不进入指标</small></article>
+    <article><span>本人记录验收通过</span><strong id="stat-passed">0</strong><small>结果为“通过”</small></article>
+    <article><span>本人记录 API 费用未知</span><strong id="stat-unknown">0</strong><small>未知不会按 0 计算</small></article>
+    <article><span>本人记录总分钟</span><strong id="stat-minutes">0</strong><small>工作 + 返工</small></article>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><h2 id="form-title">新增任务</h2><p>返工分钟只填修复、重做和复验，不要重复计入工作分钟。</p></div><button id="reset-form" type="button">重置表单</button></div>
+    <form id="task-form" novalidate autocomplete="off">
+      <div class="form-grid">
+        <label>任务名<input id="name" maxlength="200" required></label>
+        <label>任务类型<input id="type" maxlength="120" required placeholder="例如：HTML 交付"></label>
+        <label>日期<input id="date" type="date" required></label>
+        <label>使用的模型<input id="model" maxlength="120" required></label>
+        <label class="wide">可观察的验收条件<textarea id="acceptance" maxlength="1000" rows="2" required></textarea></label>
+        <label>结果<select id="outcome"><option value="pending">待验收</option><option value="passed">通过</option><option value="failed">未通过</option></select></label>
+        <label>工作分钟<input id="work-minutes" type="number" min="0" max="1000000" step="1" value="0" required></label>
+        <label>返工分钟<input id="rework-minutes" type="number" min="0" max="1000000" step="1" value="0" required></label>
+      </div>
+      <fieldset><legend>API 费用</legend><p class="hint">没有账单或无法确认时选“未知”。未知不会被计为 0。</p>
+        <label class="check"><input id="api-known" type="checkbox">我知道这项任务的 API 费用</label>
+        <div id="api-fields" class="form-grid" hidden><label>费用金额<input id="api-amount" inputmode="decimal" placeholder="0.00"></label><label>币种<input id="api-currency" maxlength="3" value="USD"></label></div>
+      </fieldset>
+      <fieldset><legend>订阅额度观察</legend><p class="hint">只记录页面显示的前后值。百分点、token、请求数和金额不是同一种单位，账本不会自动换算。</p>
+        <label class="check"><input id="usage-known" type="checkbox">我记录了同一额度窗口的前后值</label>
+        <div id="usage-fields" class="form-grid" hidden>
+          <label>单位<select id="usage-unit"><option value="percentage_points">百分点</option><option value="tokens">token</option><option value="requests">请求数</option><option value="credits">额度点数</option><option value="minutes">分钟</option><option value="other">其他</option></select></label>
+          <label id="unit-label-wrap" hidden>自定义单位<input id="unit-label" maxlength="80"></label>
+          <label>观察前<input id="usage-before" inputmode="decimal"></label><label>观察后<input id="usage-after" inputmode="decimal"></label>
+          <label class="wide">额度窗口<input id="window-label" maxlength="200" placeholder="例如：2026-10-29 当日窗口"></label>
+          <label class="check"><input id="usage-comparable" type="checkbox" checked>前后值来自可比较的同一窗口</label>
+          <label class="check"><input id="usage-reset" type="checkbox">观察期间窗口发生重置</label>
+        </div>
+      </fieldset>
+      <fieldset><legend>人工成本估算（可选）</legend><p class="hint">时薪必须由你明确填写。账本只计算同币种金额，不自动换汇。</p>
+        <label class="check"><input id="wage-known" type="checkbox">使用人工时薪估算</label>
+        <div id="wage-fields" class="form-grid" hidden><label>时薪金额<input id="wage-amount" inputmode="decimal"></label><label>币种<input id="wage-currency" maxlength="3" value="CNY"></label></div>
+      </fieldset>
+      <label>备注<textarea id="notes" maxlength="1000" rows="2"></textarea></label>
+      <p id="form-error" class="error" role="alert" tabindex="-1" hidden></p>
+      <p id="dirty-note" class="hint" hidden>表单有未保存内容。导入、载入示例和导出前请先保存或重置。</p>
+      <div class="actions"><button id="save-task" type="submit">保存任务</button><button id="cancel-edit" type="button" hidden>取消编辑</button></div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><h2>任务记录</h2><p>筛选只改变屏幕显示，不改变导出内容。</p></div><label>筛选结果<select id="filter"><option value="all">全部</option><option value="pending">待验收</option><option value="passed">通过</option><option value="failed">未通过</option></select></label></div>
+    <div id="task-list" class="task-list"></div>
+  </section>
+
+  <section class="panel"><h2>费用与同类任务观察</h2><p class="hint">同类任务只统计“验收通过”记录的总耗时中位数，并显示样本数。这是描述性结果，不证明 AI 造成了节省。</p><div id="summary"></div></section>
+  <section class="panel"><h2>导出报告</h2><p>JSON 用于完整备份；CSV 用于表格分析；Markdown 保留口径、样本数和任务明细。</p><div class="actions"><button id="export-csv" type="button">导出任务明细 CSV</button><button id="export-md" type="button">导出任务成本报告 Markdown</button></div></section>
+</main>
+<script src="core.js"></script><script src="sample-data.js"></script><script src="app.js"></script>
+</body>
+</html>

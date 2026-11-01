@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 订阅成本账本</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>AI 订阅成本账本</h1>
+    <p>把每月的 AI 订阅花费和「用 AI 完成了多少工作」放在同一张账上,算出每小时工作的成本。第一步:点「载入示例」看一遍,或到「订阅」页录入第一项订阅。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json-top">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-pick-import">导入 JSON 备份</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部订阅、产出、快照与设置</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="confirm-box" class="notice notice--danger" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-confirm-yes">确认</button>
+      <button type="button" class="btn btn--secondary" id="btn-confirm-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p id="save-warning-text"></p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份</button>
+  </div>
+  <div id="load-notice" class="notice notice--warn" role="alert" hidden><p id="load-notice-text"></p><button type="button" class="btn btn--secondary" id="btn-export-raw-recovery" hidden>下载损坏存档原文恢复包 JSON</button></div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden>
+    <p id="import-error-text"></p>
+    <button type="button" class="btn btn--secondary" id="btn-import-error-close">知道了</button>
+  </div>
+  <p id="flash" class="notice notice--ok" role="status" hidden></p>
+  <p id="sample-badge" class="notice notice--warn" hidden>当前显示的是合成示例,金额虚构,不代表任何真实账单。</p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="overview" aria-current="page">总览</button>
+    <button type="button" class="tab" data-view="subs">订阅</button>
+    <button type="button" class="tab" data-view="outputs">产出</button>
+    <button type="button" class="tab" data-view="snapshots">月度成本快照</button>
+    <button type="button" class="tab" data-view="trend">趋势</button>
+    <button type="button" class="tab" data-view="export">导出</button>
+  </nav>
+
+  <main>
+    <!-- 总览 -->
+    <section id="view-overview" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>账本还是空的</h2>
+        <p>先点「载入示例」看一遍完整流程,或者按顺序操作:</p>
+        <ol class="steps">
+          <li>到「订阅」录入每一项 AI 订阅:金额、周期、续费日、用途。</li>
+          <li>到「产出」填每月按用途估计的小时当量和一句证据。</li>
+          <li>回到「总览」看月成本、每小时当量成本、提醒和上月对比。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>查看月份</h2>
+          <label class="field field--inline">月份<input type="month" id="ov-month"></label>
+        </div>
+        <p class="hint">今天按 <strong id="today-label"></strong> 计算续费提醒。</p>
+      </div>
+
+      <div id="ov-body" class="stack"></div>
+
+      <div class="panel">
+        <h2>折算汇率与机会成本时薪</h2>
+        <p class="hint">折算汇率只用于总览估算,各币种成本仍分列显示;不填也能用。机会成本时薪用来和每小时当量成本比较,不填则不出比较。</p>
+        <form id="form-settings" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <label class="field">折算:从币种<input type="text" id="fx-from" maxlength="8" placeholder="USD"></label>
+            <label class="field">折算:到币种<input type="text" id="fx-to" maxlength="8" placeholder="CNY"></label>
+            <label class="field">1 单位「从币种」等于多少「到币种」<input type="text" id="fx-rate" inputmode="decimal" placeholder="7.2"></label>
+            <label class="field">机会成本时薪(每小时)<input type="text" id="wage-amount" inputmode="decimal" placeholder="200"></label>
+            <label class="field">时薪币种<input type="text" id="wage-currency" maxlength="8" placeholder="CNY"></label>
+          </div>
+          <p id="settings-error" class="form-error" role="alert" hidden></p>
+          <p id="settings-dirty" class="hint" hidden>设置有未应用的修改,点「应用设置」后总览、趋势和导出才会更新。</p>
+          <div class="row"><button type="submit" class="btn btn--primary">应用设置</button></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 订阅 -->
+    <section id="view-subs" class="view" hidden>
+      <div class="panel">
+        <h2 id="sub-form-title">新增订阅</h2>
+        <form id="form-sub" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <label class="field">服务名<input type="text" id="f-name" maxlength="200"></label>
+            <label class="field">档位<input type="text" id="f-tier" maxlength="200"></label>
+            <label class="field">币种
+              <select id="f-currency">
+                <option>USD</option><option>CNY</option><option>EUR</option><option>JPY</option><option>GBP</option><option value="其他">其他</option>
+              </select>
+            </label>
+            <label class="field" id="f-currency-other-wrap" hidden>其他币种代码(3–8 位字母)<input type="text" id="f-currency-other" maxlength="8"></label>
+            <label class="field">金额(最多两位小数)<input type="text" id="f-amount" inputmode="decimal"></label>
+            <label class="field">周期
+              <select id="f-period">
+                <option value="monthly">月付</option>
+                <option value="yearly">年付</option>
+                <option value="once">一次性</option>
+                <option value="usage">按量</option>
+              </select>
+            </label>
+            <label class="field" id="f-amort-wrap" hidden>摊销月数(一次性)<input type="number" id="f-amort" min="1" max="120" step="1" value="12"></label>
+            <label class="field">开始日<input type="date" id="f-start"></label>
+            <label class="field">续费日(可空)<input type="date" id="f-renew"></label>
+            <label class="field">状态
+              <select id="f-status" aria-describedby="f-status-hint">
+                <option value="active">在用</option>
+                <option value="paused">暂停</option>
+                <option value="cancelled">已退</option>
+              </select>
+              <span class="hint" id="f-status-hint">没有快照的月份按当前状态重算。改成「暂停」或「已退」后，这项订阅不再计入推算；已经保存的月度成本快照不会变化。</span>
+            </label>
+            <label class="field">用途标签<select id="f-tag"></select></label>
+            <label class="field">谁在用
+              <select id="f-who">
+                <option value="self">自己</option>
+                <option value="team">团队</option>
+              </select>
+            </label>
+            <label class="field" id="f-headcount-wrap" hidden>团队人数<input type="number" id="f-headcount" min="1" max="10000" step="1" value="2"></label>
+          </div>
+          <p id="sub-error" class="form-error" role="alert" hidden></p>
+          <div class="row">
+            <button type="submit" class="btn btn--primary" id="btn-sub-save">添加订阅</button>
+            <button type="button" class="btn btn--secondary" id="btn-sub-reset">重置表单</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>按量订阅的月账单</h2>
+        <p class="hint">按量订阅没有固定金额,每月把实际账单记在这里;没记的月份成本按 0 计并在总览提示。</p>
+        <p id="usage-empty" class="empty" hidden>还没有「按量」周期的订阅。先在上面添加一个。</p>
+        <form id="form-bill" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <label class="field">订阅<select id="b-sub"></select></label>
+            <label class="field">月份<input type="month" id="b-month"></label>
+            <label class="field">当月实际账单金额<input type="text" id="b-amount" inputmode="decimal"></label>
+          </div>
+          <p id="bill-error" class="form-error" role="alert" hidden></p>
+          <div class="row"><button type="submit" class="btn btn--primary" id="btn-bill-save">记入账单</button></div>
+        </form>
+        <div id="bills-table"></div>
+      </div>
+
+      <div class="panel">
+        <h2>全部订阅</h2>
+        <div id="subs-table"></div>
+      </div>
+    </section>
+
+    <!-- 产出 -->
+    <section id="view-outputs" class="view" hidden>
+      <div class="panel">
+        <h2>记录 AI 完成的工作</h2>
+        <p class="hint">按用途估计「本月用 AI 完成的工作量」折合多少人工小时(小时当量),并写一句交付物作证据。小时当量不是你使用 AI 的时长,而是估计不用 AI、自己完成这些交付物需要多久。每小时当量成本 = 月成本 ÷ 折合人工小时。同一月份同一用途再次提交会更新原记录。填 0 表示本月确实没有产出;不填则只显示成本、不显示比值。</p>
+        <form id="form-output" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <label class="field">月份<input type="month" id="o-month"></label>
+            <label class="field">用途<select id="o-tag"></select></label>
+            <label class="field">折合人工小时(小时当量,自估,最多两位小数)<input type="text" id="o-hours" inputmode="decimal"></label>
+            <label class="field field--wide">一句证据(交付物)<input type="text" id="o-evidence" maxlength="1000"></label>
+          </div>
+          <p id="output-error" class="form-error" role="alert" hidden></p>
+          <div class="row"><button type="submit" class="btn btn--primary" id="btn-out-save">保存产出</button>
+            <button type="button" class="btn btn--secondary" id="btn-out-cancel" hidden>取消编辑</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>全部产出记录</h2>
+        <div id="outputs-table"></div>
+      </div>
+    </section>
+
+    <!-- 用户确认的月度成本快照 -->
+    <section id="view-snapshots" class="view" hidden>
+      <div class="panel">
+        <h2>确认月度成本快照</h2>
+        <p class="hint">固定月费、年付和一次性费用按月摊销；按量费用取已录账单。这是用户确认的计算口径，不是实付账单或付款证据。先核对金额并补齐按量账单，明确为 0 也要录入。暂停、修改或删除当前订阅不会改写快照；重复保存同月会明确更新原快照。换汇估算仍使用当前汇率。</p>
+        <form id="form-snapshot" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <label class="field">成本月份<input type="month" id="snap-month" aria-describedby="snapshot-error"></label>
+            <label class="field">确认日期<input type="date" id="snap-date" aria-describedby="snapshot-error"></label>
+            <label class="field field--wide">确认来源<input type="text" id="snap-source" maxlength="200" placeholder="例如：信用卡账单与服务商收据已逐项核对" aria-describedby="snap-source-help snapshot-error"></label>
+            <label class="field field--wide">备注（可空）<textarea id="snap-note" maxlength="1000" rows="3" placeholder="记录调整、缺失票据或口径"></textarea></label>
+          </div>
+          <p id="snap-source-help" class="hint">来源是这份快照的证据说明。不要填密码、卡号或其他敏感信息。</p>
+          <p id="snapshot-preview" class="notice notice--warn"></p>
+          <p id="snapshot-error" class="form-error" role="alert" hidden></p>
+          <div class="row"><button type="submit" class="btn btn--primary" id="btn-snapshot-save">保存已确认成本快照</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>历史快照</h2>
+        <p class="hint">每个月最多一份。趋势和月报优先使用已有快照；没有快照的月份继续显示“按当前状态推算”。</p>
+        <div id="snapshots-table"></div>
+      </div>
+    </section>
+
+    <!-- 趋势 -->
+    <section id="view-trend" class="view" hidden>
+      <div class="panel">
+        <div class="panel__head">
+          <h2>近 12 个月</h2>
+          <label class="field field--inline">柱子显示的币种<select id="chart-cur"></select></label>
+        </div>
+        <p class="hint">柱是月成本，折线是产出小时当量（折合人工小时，自估）。已有快照的月份使用已确认成本；没有快照的月份按订阅当前状态推算。下表逐月标明口径。</p>
+        <div id="chart-wrap"></div>
+        <div id="trend-table"></div>
+      </div>
+    </section>
+
+    <!-- 导出 -->
+    <section id="view-export" class="view" hidden>
+      <div class="panel">
+        <h2>导出</h2>
+        <p class="hint">月报使用「总览」里选中的月份(<strong id="export-month"></strong>)和已应用的设置。</p>
+        <p id="export-hint" class="notice notice--warn" hidden>设置有未应用的修改,月报会和界面不一致。请先到「总览」点「应用设置」,月报导出已暂时禁用。</p>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="btn-export-md">下载月报 Markdown</button>
+          <button type="button" class="btn btn--secondary" id="btn-export-csv">下载订阅表 CSV</button>
+          <button type="button" class="btn btn--secondary" id="btn-export-json">下载 JSON 备份</button>
+        </div>
+        <label class="field">月报预览<textarea id="md-preview" readonly rows="14"></textarea></label>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>AI 订阅成本账本是本地工具:无登录、无联网、无支付、不接账单 API、不评价模型优劣。小时当量是自估值。</p>
+  </footer>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

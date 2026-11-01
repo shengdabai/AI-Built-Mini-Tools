@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>逐段精读器 · 一次只读一段</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">本机数据 · 不联网 · 不解释词义</span>
+      <h1>逐段精读器</h1>
+      <p class="muted">一次只显示一段,读完再推进;不懂的词和存疑的话,带着上下文记下来。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="theme-toggle" type="button" aria-pressed="false">深色模式</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner danger" role="alert" hidden></div>
+  <div id="sample-note" class="banner info" hidden>当前数据里含有「合成示例」:文本、阅读记录、生词都是为演示写的示意内容,不是真实使用记录。</div>
+
+  <div id="confirm-box" class="confirm" role="alertdialog" aria-labelledby="confirm-title" hidden>
+    <strong id="confirm-title"></strong>
+    <span id="confirm-detail" class="muted"></span>
+    <div class="row">
+      <button id="confirm-yes" type="button" class="danger">确认</button>
+      <button id="confirm-no" type="button">取消</button>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="视图">
+    <button role="tab" data-tab="read" aria-selected="false" type="button">阅读</button>
+    <button role="tab" data-tab="library" aria-selected="false" type="button">文本库</button>
+    <button role="tab" data-tab="vocab" aria-selected="false" type="button">生词与批注</button>
+    <button role="tab" data-tab="stats" aria-selected="false" type="button">耐力记录</button>
+    <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+  </nav>
+
+  <!-- 阅读 -->
+  <section id="tab-read" role="tabpanel" hidden>
+    <div id="read-empty" class="empty" hidden>
+      <p>还没有正在读的文本。</p>
+      <button id="goto-library" type="button" class="primary">去文本库添加</button>
+    </div>
+    <div id="reader" hidden>
+      <div class="row between reader-head">
+        <div class="stack-tight">
+          <h2 id="read-title"></h2>
+          <span id="read-progress" class="muted"></span>
+        </div>
+        <div class="seg" role="group" aria-label="阅读单位">
+          <button id="mode-para" type="button" aria-pressed="true">按段</button>
+          <button id="mode-sent" type="button" aria-pressed="false">按句</button>
+        </div>
+      </div>
+
+      <div class="session-bar panel">
+        <div class="clock-block">
+          <span class="muted">本次会话</span>
+          <strong id="clock" class="clock">00:00</strong>
+          <span id="sess-state" class="muted">未开始</span>
+        </div>
+        <dl class="mini-stats">
+          <div><dt>阅读量(中文字+英文词)</dt><dd id="st-chars">0</dd></div>
+          <div><dt>分钟</dt><dd id="st-min">0</dd></div>
+          <div><dt>阅读量/分钟</dt><dd id="st-cpm">0</dd></div>
+          <div><dt>标记数</dt><dd id="st-marks">0</dd></div>
+        </dl>
+        <p class="muted rule-note" id="count-rule">计数规则:点「下一段/句」或「先读过去」时,把离开的那一段(句)的中文字数加英文词数记入阅读量;回退后再次推进同一段(句)会再记一次。分钟只计计时中的时间。阅读量/分钟 = 阅读量 ÷ 分钟,分钟为 0 时显示 0。标记数 = 加入生词、批注和「先读过去」的次数。</p>
+        <div class="row">
+          <button id="sess-toggle" type="button" class="primary">开始计时</button>
+          <button id="sess-end" type="button">结束并记录</button>
+        </div>
+      </div>
+      <div id="break-note" class="banner warn" role="status" hidden>
+        <span id="break-text"></span>
+        <button id="break-ack" type="button">知道了,继续</button>
+      </div>
+
+      <article id="unit-card" class="reader-card" aria-live="polite">
+        <div id="unit-meta" class="unit-meta"></div>
+        <p id="unit-text" class="reader-text"></p>
+      </article>
+      <div id="finished" class="panel" hidden>
+        <strong>这篇读完了。</strong>
+        <p class="muted">可以回到上一段复习,或从头再读一遍。</p>
+        <button id="reread" type="button">从头再读</button>
+      </div>
+
+      <div class="panel sel-panel">
+        <h3>标记</h3>
+        <p class="muted">在上面的正文里选中文字,会自动填入下框;也可以自己输入。</p>
+        <div class="grid-2">
+          <label>选中的词或句<input id="sel-text" type="text" autocomplete="off"></label>
+          <label>批注(存疑时写,可空)<input id="sel-note" type="text" autocomplete="off"></label>
+        </div>
+        <div class="row">
+          <button id="add-vocab" type="button">加入生词表</button>
+          <button id="add-doubt" type="button">不同意 / 存疑</button>
+          <button id="sel-clear" type="button" class="link">清空</button>
+        </div>
+      </div>
+
+      <div class="reader-nav">
+        <button id="prev" type="button">上一段</button>
+        <button id="skip" type="button">先读过去</button>
+        <button id="next" type="button" class="primary">下一段</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 文本库 -->
+  <section id="tab-library" role="tabpanel" hidden>
+    <div class="two-col">
+      <div class="panel">
+        <h2>添加文本</h2>
+        <form id="add-form" class="stack" novalidate>
+          <label>标题(可空)<input id="text-title" type="text" autocomplete="off"></label>
+          <label>粘贴正文(空行分段)<textarea id="text-body" placeholder="把要精读的文字粘贴到这里,段落之间空一行。"></textarea></label>
+          <label>或打开 .txt / .md 文件<input id="text-file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
+          <p id="add-error" class="error" role="alert" hidden></p>
+          <div class="row"><button id="add-text" type="submit" class="primary">加入文本库</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <div class="row between"><h2>我的文本</h2><span id="text-count" class="muted"></span></div>
+        <div id="text-list" class="stack"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 生词与批注 -->
+  <section id="tab-vocab" role="tabpanel" hidden>
+    <div class="two-col">
+      <div class="panel">
+        <div class="row between">
+          <h2>生词表 <span id="vocab-count" class="count"></span></h2>
+          <label class="inline">排序
+            <select id="vocab-sort"><option value="recent">最近添加</option><option value="count">出现次数</option></select>
+          </label>
+        </div>
+        <div id="vocab-list" class="stack"></div>
+      </div>
+      <div class="panel">
+        <h2>批注清单 <span id="note-count" class="count"></span></h2>
+        <div id="note-list" class="stack"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 耐力记录 -->
+  <section id="tab-stats" role="tabpanel" hidden>
+    <div class="panel">
+      <h2>目标与节奏</h2>
+      <form id="settings-form" class="settings-grid" novalidate>
+        <label>每天目标(分钟)<input id="goal-min" type="number" step="any" min="0"></label>
+        <label>每隔多少分钟提示休息<input id="break-min" type="number" step="any" min="0"></label>
+        <button id="save-settings" type="submit">保存设置</button>
+      </form>
+      <p id="settings-error" class="error" role="alert" hidden></p>
+    </div>
+    <div id="stats-body"></div>
+  </section>
+
+  <!-- 导出与数据 -->
+  <section id="tab-export" role="tabpanel" hidden>
+    <div class="two-col">
+      <div class="panel stack">
+        <h2>导出</h2>
+        <p id="export-note" class="muted"></p>
+        <div class="row">
+          <button id="export-vocab" type="button">生词 CSV</button>
+          <button id="export-notes" type="button">批注 Markdown</button>
+          <button id="export-sessions" type="button">阅读记录 CSV</button>
+          <button id="export-json" type="button">JSON 备份</button>
+        </div>
+        <h3>批注 Markdown 预览</h3>
+        <pre id="notes-preview" class="preview"></pre>
+      </div>
+      <div class="panel stack">
+        <h2>导入与清空</h2>
+        <label>导入 JSON 备份(会替换当前全部数据)<input id="import-file" type="file" accept=".json,application/json"></label>
+        <p id="import-msg" class="error" role="alert" hidden></p>
+        <hr>
+        <button id="clear-data" type="button" class="danger">清空全部数据</button>
+        <p class="muted">数据只存在这个浏览器的 localStorage(键 reader.v1)。换设备或清理浏览器数据前,先导出 JSON 备份。</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="footer muted">不解释词义、不联网查词、不朗读、不评分理解。分句规则对特殊标点可能不准。</p>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

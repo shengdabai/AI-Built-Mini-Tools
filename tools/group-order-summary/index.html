@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>团餐点单汇总</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__title">
+    <h1>团餐点单汇总</h1>
+    <p>粘贴群里的回复,自动算出每道菜几份、每人该付多少。数据只存在这台设备的浏览器里。</p>
+  </div>
+  <div class="topbar__actions" role="group" aria-label="数据操作">
+    <label class="field field--inline">
+      <span>点单日期</span>
+      <input type="date" id="date-input" aria-label="点单日期">
+    </label>
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <label class="btn btn--on-dark" for="file-import">导入 JSON 备份</label>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空数据</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p id="save-warning-text"><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-warning-export">导出 JSON 备份</button>
+    <button type="button" class="btn btn--secondary" id="btn-corrupt-discard" hidden>丢弃无法读取的旧数据并重新开始</button>
+  </div>
+  <div id="confirm-area" class="notice notice--warn" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-confirm-yes">确认</button>
+      <button type="button" class="btn btn--secondary" id="btn-confirm-no">取消</button>
+    </div>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+  <p id="save-status" class="muted save-status" role="status">尚未写入任何数据</p>
+
+  <div id="empty-guide" class="panel panel--guide" hidden>
+    <h2>还没有数据</h2>
+    <p>先点「载入示例」看一遍完整流程,或者这样开始:</p>
+    <ul class="steps">
+      <li>在「菜单」里粘贴菜单,每行一道菜:菜名 | 单价 | 可选规格。</li>
+      <li>把群里的回复粘贴到「收集回复」,每人一行,例如「张三: 宫保鸡丁 x2 微辣」。</li>
+      <li>右边立刻出现按菜合计、按人应付和待确认列表,再复制下单文本和收款文本。</li>
+    </ul>
+    <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+  </div>
+
+  <main class="layout">
+    <div class="col col--input">
+      <section class="panel" aria-labelledby="h-menu">
+        <h2 id="h-menu">菜单 <span class="muted" id="menu-count"></span></h2>
+        <div id="menu-mode-note" class="notice notice--warn" hidden>
+          <p id="menu-mode-text"></p>
+        </div>
+        <div class="row"><button type="button" class="btn btn--secondary" id="btn-menu-mode" hidden></button></div>
+        <label class="field">
+          <span>每行一道菜:菜名=别名1, 别名2 | 单价(元) | 规格1, 规格2</span>
+          <textarea id="menu-text" rows="8" spellcheck="false" placeholder="宫保鸡丁=宫保, 鸡丁饭 | 22 | 微辣, 不辣&#10;红烧肉 | 28&#10;米饭 | 2"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="btn-menu-apply">应用菜单</button>
+          <span id="menu-dirty" class="muted" hidden>菜单有未应用的修改</span>
+        </div>
+        <ul id="menu-errors" class="error-list" role="alert" hidden></ul>
+        <form id="dish-form" class="form-grid" autocomplete="off">
+          <h3 class="form-grid__title">手动加一道菜</h3>
+          <label class="field"><span>菜名</span><input type="text" id="dish-name" maxlength="100" required></label>
+          <label class="field"><span>单价(元)</span><input type="text" id="dish-price" inputmode="decimal" placeholder="22 或 22.5" required></label>
+          <label class="field"><span>别名(逗号分隔,可空)</span><input type="text" id="dish-aliases"></label>
+          <label class="field"><span>规格(逗号分隔,可空)</span><input type="text" id="dish-specs"></label>
+          <div class="row"><button type="submit" class="btn btn--secondary">添加到菜单</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="h-replies">
+        <h2 id="h-replies">收集回复 <span class="muted" id="day-label"></span></h2>
+        <label class="field">
+          <span>每人一行:名字: 菜名 x2 规格 / 名字 菜名 / 名字: 不吃 / 名字: 同上。一人点多道菜用逗号分隔。</span>
+          <textarea id="replies-text" rows="12" maxlength="200000" spellcheck="false" placeholder="张三: 宫保鸡丁 x2 微辣&#10;李四 红烧肉&#10;王五: 不吃&#10;赵六: 同上"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" class="btn btn--secondary" id="btn-last-same">上次同款</button>
+          <span id="last-same-hint" class="muted"></span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-fee">
+        <h2 id="h-fee">配送费 / 包装费分摊</h2>
+        <div class="form-grid form-grid--two">
+          <label class="field"><span>总费用(元,没有就留空)</span><input type="text" id="fee-input" inputmode="decimal" placeholder="例如 8" aria-describedby="fee-error"></label>
+          <label class="field"><span>分摊方式</span>
+            <select id="fee-mode">
+              <option value="head">按人头平分</option>
+              <option value="amount">按各人餐费金额比例</option>
+            </select>
+          </label>
+        </div>
+        <p id="fee-error" class="error-text" role="alert" hidden></p>
+        <p class="muted" id="fee-note"></p>
+      </section>
+    </div>
+
+    <div class="col col--result">
+      <section class="panel panel--warn" id="pending-panel" aria-labelledby="h-pending" hidden>
+        <h2 id="h-pending">待确认 <span class="count" id="pending-count">0</span></h2>
+        <p class="muted">下面这些没有计入汇总。改一下上面的回复文字(写清菜名或数量),这里会自动更新。</p>
+        <ul id="pending-list" class="pending-list"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-summary">
+        <h2 id="h-summary">汇总</h2>
+        <p class="total-line">总金额 <strong id="total-amount" class="amount">0</strong> 元<span id="fee-line" class="muted"></span></p>
+        <h3>按菜名 × 规格</h3>
+        <div class="table-wrap">
+          <table id="dish-table">
+            <thead><tr><th scope="col">菜</th><th scope="col">规格</th><th scope="col" class="num">数量</th><th scope="col" class="num">金额(元)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h3>按人</h3>
+        <div class="table-wrap">
+          <table id="person-table">
+            <thead><tr><th scope="col">姓名</th><th scope="col">点了什么</th><th scope="col" class="num">餐费</th><th scope="col" class="num">应付(元)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-output">
+        <h2 id="h-output">输出与导出</h2>
+        <p id="export-hint" class="notice notice--warn" hidden></p>
+        <label class="field">
+          <span>商家下单文本</span>
+          <textarea id="order-text" rows="5" readonly></textarea>
+        </label>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-copy-order">复制下单文本</button></div>
+        <label class="field">
+          <span>收款文本</span>
+          <textarea id="pay-text" rows="4" readonly></textarea>
+        </label>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-copy-pay">复制收款文本</button></div>
+        <div class="row row--export">
+          <button type="button" class="btn btn--secondary" id="btn-csv-dish">导出汇总 CSV(按菜)</button>
+          <button type="button" class="btn btn--secondary" id="btn-csv-person">导出汇总 CSV(按人)</button>
+          <button type="button" class="btn btn--secondary" id="btn-json">导出 JSON 备份(菜单与全部历史)</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-week">
+        <h2 id="h-week">本周 <span class="muted" id="week-range"></span></h2>
+        <div class="table-wrap">
+          <table id="week-table">
+            <thead><tr><th scope="col">姓名</th><th scope="col" class="num">点单次数</th><th scope="col" class="num">金额(元)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h3>历史记录</h3>
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+    </div>
+  </main>
+  <footer class="footer muted">匹配菜名是启发式的,请核对待确认列表;不接外卖平台、不收款。示例数据为合成,姓名虚构。</footer>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

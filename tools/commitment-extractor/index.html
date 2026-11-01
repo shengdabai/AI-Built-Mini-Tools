@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>承诺跟进提取器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1 class="brand-title">承诺跟进提取器</h1>
+      <p class="brand-sub">粘贴群聊或会议纪要 → 谁答应了什么、何时交、哪句话还没说清</p>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" class="btn btn-on-dark" id="btn-sample">载入示例</button>
+      <button type="button" class="btn btn-on-dark btn-danger-ghost" id="btn-clear">清空数据</button>
+    </div>
+  </header>
+
+  <p class="notice" role="note">
+    <strong>规则识别会漏判和误判，请人工核对。</strong>
+    全部在本机浏览器里用固定规则处理，不联网、不调用 AI；数据只存在本机 localStorage。
+    <span id="sample-flag" class="sample-flag" hidden>当前为合成示例</span>
+  </p>
+
+  <div id="store-alert" class="store-alert" role="alert" hidden></div>
+
+  <main class="workbench">
+    <section class="pane pane-source" aria-labelledby="src-title">
+      <div class="pane-head">
+        <h2 id="src-title" class="pane-title">原文</h2>
+        <div class="seg" role="group" aria-label="原文视图">
+          <button type="button" class="seg-btn" id="view-edit" aria-pressed="true">编辑</button>
+          <button type="button" class="seg-btn" id="view-map" aria-pressed="false">对照</button>
+        </div>
+      </div>
+
+      <div class="source-controls">
+        <label class="field field-inline" for="base-date">
+          <span class="field-label">基准日期</span>
+          <input type="date" id="base-date" class="input">
+        </label>
+        <button type="button" class="btn btn-primary" id="btn-run">识别承诺</button>
+      </div>
+      <p class="hint">「明天」「下周三」「月底」都按基准日期换算。支持 <span class="kbd-like">张三：…</span>、<span class="kbd-like">[10:32] 李四: …</span>、<span class="kbd-like">王五 10:32</span> 换行正文、无说话人的纪要条目。</p>
+
+      <label class="sr-only" for="src-input">粘贴群聊记录或会议纪要</label>
+      <textarea id="src-input" class="src-input" spellcheck="false"
+        placeholder="把群聊记录或会议纪要粘贴到这里，例如：&#10;[10:32] 张三: 周五前我把报价发你&#10;李四：那个色卡回头发你&#10;- 供应商会在下周一前寄出样品&#10;&#10;没有现成材料？点右上角「载入示例」。"></textarea>
+
+      <div id="src-view" class="src-view" hidden tabindex="-1" aria-label="原文对照"></div>
+
+      <div class="legend" aria-label="图例">
+        <span class="legend-item"><span class="hl hl-commit"><span class="hl-tag">承诺</span>清晰：有人、有事、有日期</span></span>
+        <span class="legend-item"><span class="hl hl-unclear"><span class="hl-tag">？待澄清</span>缺人 / 缺期限 / 指代不明</span></span>
+      </div>
+    </section>
+
+    <section class="pane pane-list" aria-labelledby="list-title">
+      <div class="pane-head">
+        <h2 id="list-title" class="pane-title">承诺清单</h2>
+        <div class="stats" id="stats" aria-live="polite"></div>
+      </div>
+
+      <div class="filters">
+        <label class="field field-inline" for="f-owner">
+          <span class="field-label">负责人</span>
+          <select id="f-owner" class="input"></select>
+        </label>
+        <label class="field field-inline" for="f-status">
+          <span class="field-label">状态</span>
+          <select id="f-status" class="input">
+            <option value="">全部</option>
+            <option value="todo">待办</option>
+            <option value="done">已完成</option>
+            <option value="cancelled">已取消</option>
+          </select>
+        </label>
+        <label class="field field-inline" for="f-clarity">
+          <span class="field-label">清晰度</span>
+          <select id="f-clarity" class="input">
+            <option value="">全部</option>
+            <option value="unclear">待澄清</option>
+            <option value="clear">清晰</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <h3 class="empty-title">还没有承诺</h3>
+        <ol class="empty-steps">
+          <li>左侧粘贴群聊记录或会议纪要（或点「载入示例」）</li>
+          <li>确认基准日期，点「识别承诺」</li>
+          <li>在这里改负责人 / 期限 / 状态，复制追问，导出日历</li>
+        </ol>
+      </div>
+
+      <div class="table-wrap" id="table-wrap" hidden>
+        <table class="ctable">
+          <caption class="sr-only">识别出的承诺，可直接编辑</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="col-mark">识别</th>
+              <th scope="col" class="col-owner">负责人</th>
+              <th scope="col" class="col-task">事项</th>
+              <th scope="col" class="col-due">期限</th>
+              <th scope="col" class="col-status">状态</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <p class="filter-empty" id="filter-empty" hidden>当前筛选下没有承诺。</p>
+      </div>
+
+      <section class="clarify" id="clarify" aria-labelledby="clarify-title" hidden>
+        <div class="clarify-head">
+          <h3 id="clarify-title" class="clarify-title">这几句话没说清，需要追问</h3>
+          <button type="button" class="btn btn-secondary" id="btn-copy">复制全部问题</button>
+        </div>
+        <ol class="q-list" id="q-list"></ol>
+      </section>
+
+      <div class="export" id="export" hidden>
+        <span class="export-label">导出</span>
+        <button type="button" class="btn btn-secondary" id="btn-csv">CSV 表格</button>
+        <button type="button" class="btn btn-secondary" id="btn-md">Markdown 纪要</button>
+        <button type="button" class="btn btn-secondary" id="btn-ics">.ics 日历</button>
+        <span class="export-note" id="ics-note"></span>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

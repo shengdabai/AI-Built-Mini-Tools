@@ -1,0 +1,55 @@
+/* Recovery component owns these semantic tokens; existing app styles are untouched. */
+:root {
+  --recovery-bg: #202631;
+  --recovery-text: #f4f4f4;
+  --recovery-border: #aebcca;
+  --recovery-focus: #ffffff;
+  --recovery-space: 1rem;
+  --recovery-small-space: .5rem;
+  --recovery-font: 1rem;
+  --recovery-title: 1.125rem;
+  --recovery-line-height: 1.6;
+  --recovery-border-width: 1px;
+  --recovery-focus-width: 2px;
+  --recovery-focus-offset: 3px;
+  --recovery-radius: .5rem;
+  --recovery-target: 44px;
+}
+.archive-recovery {
+  position: relative;
+  color: var(--recovery-text);
+  background: var(--recovery-bg);
+  border: var(--recovery-border-width) solid var(--recovery-border);
+  border-radius: var(--recovery-radius);
+  padding: var(--recovery-space);
+  margin-block-end: var(--recovery-space);
+  font-size: var(--recovery-font);
+  line-height: var(--recovery-line-height);
+  overflow-wrap: anywhere;
+}
+.archive-recovery[hidden] { display: none; }
+.archive-recovery h2 { margin: 0; font-size: var(--recovery-title); }
+.archive-recovery p { margin-block: var(--recovery-small-space); }
+.archive-recovery button, .archive-recovery label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--recovery-small-space);
+  min-height: var(--recovery-target);
+  margin-block: var(--recovery-small-space);
+  margin-inline-end: var(--recovery-small-space);
+}
+.archive-recovery button {
+  max-width: 100%;
+  padding: var(--recovery-small-space) var(--recovery-space);
+  font: inherit;
+  color: inherit;
+  background: inherit;
+  border: var(--recovery-border-width) solid var(--recovery-border);
+  border-radius: var(--recovery-radius);
+  cursor: pointer;
+}
+.archive-recovery button:disabled { cursor: not-allowed; border-style: dashed; }
+.archive-recovery :focus-visible {
+  outline: var(--recovery-focus-width) solid var(--recovery-focus);
+  outline-offset: var(--recovery-focus-offset);
+}

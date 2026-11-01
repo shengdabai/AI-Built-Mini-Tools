@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写作复售账本 · 同一段时间卖了几次</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">自用账本 · 数据只存在本机 · 不联网</span>
+      <h1>写作复售账本</h1>
+      <p class="muted">记下每部作品的创作耗时和每一次再售,看同一段时间被卖了几次。“再售”指把同一作品再发布或再利用一次(换渠道、改写、合集等);每条发布或再利用记录计 1 次,包含原发。次数只是分发记录,不代表有人付款。第一步:点右上角「载入示例」,或点下面的「新增作品」。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="import-btn-top" type="button" aria-describedby="import-error">导入 JSON 备份</button>
+      <button id="clear-data" type="button" class="danger">清空全部作品与渠道</button>
+      <input id="import-file" type="file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner banner-danger" role="alert" hidden><span id="save-warning-text"></span> <button id="warn-export" type="button">导出当前内存中的全部账本 JSON 备份</button></div>
+  <p id="sample-banner" class="banner banner-info" hidden>合成示例,金额虚构:当前作品、次数和金额都是演示数据,不是真实记录。</p>
+  <p id="today-note" class="banner banner-info" hidden></p>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-title" hidden>
+    <strong id="confirm-title"></strong>
+    <span id="confirm-text" class="muted"></span>
+    <div class="row">
+      <button id="confirm-yes" type="button" class="danger">确认</button>
+      <button id="confirm-no" type="button">取消</button>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="视图">
+    <button role="tab" data-tab="ledger" aria-selected="true" type="button">账本</button>
+    <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+  </nav>
+
+  <div id="tab-ledger" class="ledger" role="tabpanel">
+    <main class="viz">
+      <section id="empty" class="panel empty" hidden>
+        <h2>还没有作品</h2>
+        <p>点击下面的「新增作品」,填写第一部作品:标题、类型、首次创作耗时和创作日期。再用「记一次再售」登记每次把它发布或再利用的渠道和形式。</p>
+        <div class="row"><button id="empty-add" type="button" class="primary">新增作品</button></div>
+        <p class="muted">想先看看效果,点右上角「载入示例」(合成示例,金额虚构)。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-month">
+        <div class="row between">
+          <h2 id="h-month">月报</h2>
+          <label class="inline">月份(月报与导出共用)<input id="report-month" type="month"></label>
+        </div>
+        <div id="month-cards" class="cards"></div>
+        <p class="muted small">每小时被售次数 = 当月再售次数 ÷ (当月新作品的首次耗时 + 当月再售的额外耗时)。当月没有耗时就不计算。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-hints">
+        <h2 id="h-hints">规则提示</h2>
+        <ul id="hints" class="hints"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-heat">
+        <h2 id="h-heat">作品 × 月份复售热力格</h2>
+        <p class="muted small">格内数字是该月的再售次数,颜色越深次数越多;最近 12 个月。</p>
+        <div id="heatmap" class="heat-wrap"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-scatter">
+        <h2 id="h-scatter">时间投入 vs 售出次数</h2>
+        <p class="muted small">横轴是累计耗时(首次加额外),纵轴是被售次数,圆的大小是触达合计(没填触达按最小圆)。越靠左上,同一段时间卖得越多。</p>
+        <div id="scatter" class="scatter-wrap"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-channels">
+        <h2 id="h-channels">渠道分布</h2>
+        <div id="channels-bars" class="bars"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-works">
+        <h2 id="h-works">作品表</h2>
+        <p class="muted small">被售次数 = 这部作品的发布或再利用记录条数,每条计 1 次,含原发;不代表有人付费成交。每小时被售次数 = 被售次数 ÷ 累计耗时。每小时收入只计已填的收入。</p>
+        <div class="table-scroll">
+          <table id="works-table">
+            <thead><tr>
+              <th scope="col">标题</th><th scope="col">类型</th><th scope="col">创作日期</th><th scope="col">首次耗时</th>
+              <th scope="col">被售次数</th><th scope="col">累计耗时</th><th scope="col">每小时被售次数</th><th scope="col">每小时收入</th><th scope="col">操作</th>
+            </tr></thead>
+            <tbody id="works-body"></tbody>
+          </table>
+        </div>
+        <div id="records" class="records" hidden></div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <section class="panel" aria-labelledby="h-addwork">
+        <h2 id="h-addwork">新增作品</h2>
+        <form id="work-form" novalidate>
+          <label>标题<input id="w-title" type="text" placeholder="例如:写作是把同一段时间卖很多次" autocomplete="off" aria-describedby="work-error"></label>
+          <div class="grid-2">
+            <label>类型<select id="w-type"></select></label>
+            <label>创作日期<input id="w-date" type="date" aria-describedby="work-error"></label>
+          </div>
+          <label>首次创作耗时(小时)<input id="w-hours" type="text" inputmode="decimal" placeholder="例如:6 或 2.5" autocomplete="off" aria-describedby="work-error"></label>
+          <p id="work-error" class="error" role="alert" hidden></p>
+          <div class="row"><button id="w-submit" type="submit" class="primary">添加作品</button><button id="w-cancel" type="button" hidden>取消修改</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="h-addresale">
+        <h2 id="h-addresale">记一次再售</h2>
+        <form id="resale-form" novalidate>
+          <label>作品<select id="r-work"></select></label>
+          <div class="grid-2">
+            <label>日期<input id="r-date" type="date" aria-describedby="resale-error"></label>
+            <label>形式<select id="r-form"></select></label>
+          </div>
+          <div class="grid-2">
+            <label>渠道<select id="r-channel"></select></label>
+            <label>额外耗时(小时)<input id="r-extra" type="text" inputmode="decimal" value="0" autocomplete="off" aria-describedby="resale-error"></label>
+          </div>
+          <div class="grid-2">
+            <label>触达(可选)<input id="r-reach" type="text" inputmode="numeric" placeholder="人数,可留空" autocomplete="off" aria-describedby="resale-error"></label>
+            <label>收入(可选,元)<input id="r-revenue" type="text" inputmode="decimal" placeholder="可留空" autocomplete="off" aria-describedby="resale-error"></label>
+          </div>
+          <label>交易引用（可填 ASCII 订单代号，不填客户信息）<input id="r-sale-ref" type="text" placeholder="例如 ORD-2026-001，可留空" autocomplete="off" aria-describedby="resale-error"></label>
+          <p id="resale-error" class="error" role="alert" hidden></p>
+          <div class="row"><button id="r-submit" type="submit" class="primary">记录再售</button><button id="r-cancel" type="button" hidden>取消修改</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="h-channelcfg">
+        <h2 id="h-channelcfg">渠道设置</h2>
+        <ul id="channel-list" class="chips"></ul>
+        <form id="channel-form" class="grid-add" novalidate>
+          <label>新增渠道<input id="c-name" type="text" autocomplete="off" aria-describedby="channel-error"></label>
+          <button type="submit">添加</button>
+        </form>
+        <p id="channel-error" class="error" role="alert" hidden></p>
+      </section>
+    </aside>
+  </div>
+
+  <div id="tab-export" class="export" role="tabpanel" hidden>
+    <section class="panel">
+      <h2>导出</h2>
+      <p class="muted">三种导出都按已保存的账本即时生成;左侧表单里有未保存的内容时导出暂停。CSV 和 Markdown 里以 = + - @ 开头的文字会加单引号前缀,防止被表格软件当公式。</p>
+      <div class="row">
+        <button id="export-csv" type="button" class="primary">下载作品表 CSV</button>
+        <button id="export-md" type="button" class="primary">下载月报 Markdown</button>
+        <button id="export-json" type="button">下载全部账本 JSON 备份</button>
+      </div>
+      <p id="export-lock" class="error" role="status" hidden></p>
+      <h3>月报预览</h3>
+      <label class="inline">月份(与账本页月报共用)<input id="export-month" type="month"></label>
+      <pre id="md-preview" class="preview" tabindex="0"></pre>
+    </section>
+    <section class="panel">
+      <h2>导入 JSON 备份</h2>
+      <p class="muted">只接受本工具导出的备份。类型、渠道、形式、日期、小时、金额有任何一项不合法,整份拒绝,不会导入其中一部分。</p>
+      <div class="row"><button id="import-btn" type="button" aria-describedby="import-error">选择 JSON 备份文件导入</button></div>
+      <p class="muted">导入先校验整份文件,通过后写明数量并请你确认,确认后才写入。</p>
+      <p id="import-error" class="error" role="alert" hidden></p>
+      <p id="import-ok" class="ok" role="status" hidden></p>
+    </section>
+  </div>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

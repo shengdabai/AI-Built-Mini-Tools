@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 答案核实清单</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>AI 答案核实清单</h1>
+    <p class="tagline">把「信」改成「查」:把 AI 答案拆成可逐条检查的陈述(断言),记录证据,再生成下一轮追问提示词。不联网,不调用模型,数据只存在本机浏览器。</p>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" id="load-sample" class="btn">载入示例</button>
+    <button type="button" id="new-task" class="btn btn-primary">新建核实任务</button>
+  </div>
+</header>
+
+<div id="save-warning" class="banner banner-danger" role="alert" hidden>
+  <strong>未保存</strong>
+  <span id="save-warning-text"></span>
+  <button type="button" class="btn" data-go="data">去导出备份</button>
+</div>
+<div id="toast" class="banner banner-info" role="status" hidden></div>
+<div id="confirm-bar" class="banner banner-confirm" role="alertdialog" aria-live="assertive" hidden>
+  <span id="confirm-text"></span>
+  <button type="button" class="btn btn-danger" id="confirm-yes">确认</button>
+  <button type="button" class="btn" id="confirm-no">取消</button>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="任务列表">
+    <h2>任务</h2>
+    <ul id="task-list" class="task-list"></ul>
+    <p id="task-empty" class="muted" hidden>还没有任务。点「新建核实任务」,或「载入示例」看一遍完整流程。</p>
+  </aside>
+
+  <main class="main">
+    <nav class="tabs" role="tablist" aria-label="工作区">
+      <button type="button" role="tab" class="tab" data-tab="verify" aria-selected="true">核实</button>
+      <button type="button" role="tab" class="tab" data-tab="probe" aria-selected="false">拷问</button>
+      <button type="button" role="tab" class="tab" data-tab="data" aria-selected="false">统计与导出</button>
+    </nav>
+
+    <section id="empty-guide" class="panel" hidden>
+      <h2>开始核实一份 AI 答案</h2>
+      <ol class="guide">
+        <li>新建任务,贴上问题与 AI 的答案,填模型名和日期。</li>
+        <li>把答案拆成逐条断言,标类型,再逐条去查并记证据。</li>
+        <li>看结论状态:事实、数字、引用类没核实就不可引用。</li>
+        <li>用拷问模板生成下一轮提示词,把修正数记下来。</li>
+      </ol>
+    </section>
+
+    <div id="view-verify" class="view" data-view="verify">
+      <section class="panel" id="task-panel" aria-labelledby="h-task">
+        <h2 id="h-task">答案</h2>
+        <div class="form-grid">
+          <label class="field field-wide">问题
+            <textarea id="t-question" rows="2"></textarea></label>
+          <label class="field">模型名
+            <input id="t-model" type="text" autocomplete="off"></label>
+          <label class="field">日期
+            <input id="t-date" type="date"></label>
+          <label class="field field-wide">AI 答案(粘贴)
+            <textarea id="t-answer" rows="6"></textarea></label>
+        </div>
+      </section>
+
+      <section class="panel status-panel" id="status-panel" aria-live="polite"></section>
+
+      <section class="panel" id="claims-panel" aria-labelledby="h-claims">
+        <div class="panel-head">
+          <h2 id="h-claims">断言</h2>
+          <div class="btn-row">
+            <button type="button" id="split-btn" class="btn">按句号/换行粗拆答案</button>
+          </div>
+        </div>
+        <div id="answer-changed" class="banner banner-info" role="status" hidden>
+          <span id="answer-changed-text"></span>
+          <button type="button" class="btn" id="confirm-claims">确认断言仍对应当前答案</button>
+        </div>
+        <form id="add-claim-form" class="add-claim">
+          <label class="field field-grow">手动添加一条断言
+            <input id="add-claim-text" type="text" autocomplete="off"></label>
+          <button type="submit" class="btn btn-primary">添加</button>
+        </form>
+        <p id="claims-empty" class="muted" hidden>还没有断言。粗拆答案,或手动逐条添加。</p>
+        <ol id="claims" class="claims"></ol>
+      </section>
+    </div>
+
+    <div id="view-probe" class="view" data-view="probe" hidden>
+      <section class="panel" aria-labelledby="h-probe">
+        <h2 id="h-probe">生成下一轮提示词</h2>
+        <div class="form-grid">
+          <label class="field">模板
+            <select id="p-kind">
+              <option value="self">自我批判</option>
+              <option value="improve">改进而非推翻</option>
+              <option value="cross">交叉模型</option>
+            </select></label>
+          <label class="field" id="p-claim-wrap">要修正的断言
+            <select id="p-claim"></select></label>
+          <label class="field field-wide" id="p-other-wrap">另一个模型的答案(交叉模型时粘贴;留空则用本任务答案)
+            <textarea id="p-other" rows="4"></textarea></label>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="p-gen" class="btn btn-primary">生成提示词</button>
+          <button type="button" id="p-copy" class="btn" disabled>复制</button>
+        </div>
+        <label class="field field-wide">提示词(可直接复制)
+          <textarea id="p-out" rows="9" readonly></textarea></label>
+      </section>
+
+      <section class="panel" aria-labelledby="h-rounds">
+        <h2 id="h-rounds">拷问记录</h2>
+        <form id="round-form" class="form-grid" novalidate>
+          <label class="field">第几轮
+            <input id="r-n" type="number" min="1" step="1" required></label>
+          <label class="field">用了哪个模板
+            <select id="r-kind">
+              <option value="self">自我批判</option>
+              <option value="improve">改进而非推翻</option>
+              <option value="cross">交叉模型</option>
+            </select></label>
+          <label class="field">本轮修正了几条
+            <input id="r-fixed" type="number" min="0" step="1" value="0" required></label>
+          <label class="field field-wide">结果摘要
+            <input id="r-summary" type="text" autocomplete="off"></label>
+          <div class="field"><button type="submit" class="btn btn-primary">记录这一轮</button></div>
+        </form>
+        <p id="round-error" class="field-error" hidden></p>
+        <p id="rounds-empty" class="muted" hidden>还没有拷问记录。</p>
+        <ul id="rounds" class="rounds"></ul>
+      </section>
+    </div>
+
+    <div id="view-data" class="view" data-view="data" hidden>
+      <section class="panel" aria-labelledby="h-stats">
+        <h2 id="h-stats">统计</h2>
+        <div id="stats"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-models">
+        <h2 id="h-models">按模型汇总(跨任务)</h2>
+        <p class="muted">错误率 = 有误 ÷ (已核实 + 有误)。未核、存疑不进分母。</p>
+        <div class="table-wrap" id="model-stats"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-export">
+        <h2 id="h-export">导出与数据</h2>
+        <div class="btn-row">
+          <button type="button" id="export-md" class="btn btn-primary">导出当前任务报告(Markdown)</button>
+          <button type="button" id="export-csv" class="btn">导出全部断言(CSV)</button>
+          <button type="button" id="export-json" class="btn">备份全部(JSON)</button>
+        </div>
+        <div class="btn-row">
+          <label class="btn" for="import-file">导入 JSON 备份</label>
+          <input id="import-file" type="file" accept="application/json,.json" class="visually-hidden">
+          <button type="button" id="clear-all" class="btn btn-danger">清空全部数据</button>
+        </div>
+        <p id="import-error" class="field-error" hidden></p>
+        <label class="field field-wide">报告预览(Markdown)
+          <textarea id="md-preview" rows="14" readonly></textarea></label>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定投复利践行账本</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="header-inner">
+    <div>
+      <h1>定投复利践行账本</h1>
+      <p class="tagline">用固定规则替代意志:记录、对账、看复利(每期收益继续计息,俗称利滚利)。第一步:点右上角「载入示例」,或在左侧点「新建践行」。数据只存在这台设备的浏览器里。</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-onDark" id="load-sample">载入示例</button>
+      <button type="button" class="btn btn-onDark" id="import-btn">导入 JSON 备份</button>
+      <input id="import-file" type="file" accept=".json,application/json" class="sr-only" tabindex="-1" aria-label="选择 JSON 备份文件">
+      <button type="button" class="btn btn-onDark" id="clear-btn">清空全部践行和记录</button>
+    </div>
+  </div>
+</header>
+
+<div id="save-warning" class="banner banner-danger" role="alert" hidden>
+  <strong>未保存</strong>:浏览器拒绝写入本机存储(空间已满或被禁用),刚才的改动只在当前页面里,关闭后会丢失。请立即到「导出与备份」下载 JSON 备份。
+  <button type="button" class="btn btn-quiet" id="warn-export">去导出备份</button>
+</div>
+<div id="load-warning" class="banner banner-warn" role="status" hidden></div>
+<div id="clear-confirm" class="banner banner-warn" role="alertdialog" aria-label="确认清空" hidden>
+  <span>清空会删除本机保存的全部践行与记录,且无法恢复。建议先导出 JSON 备份。</span>
+  <span class="row-actions">
+    <button type="button" class="btn btn-danger" id="clear-yes">确认清空全部践行和记录</button>
+    <button type="button" class="btn btn-quiet" id="clear-no">取消</button>
+  </span>
+</div>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="today-note" class="note" hidden></p>
+<div id="import-out" role="status"></div>
+
+<div class="layout">
+  <aside class="side" aria-label="践行列表">
+    <section class="card">
+      <h2>我的践行</h2>
+      <ul id="practice-list" class="practice-list"></ul>
+      <p id="list-empty" class="muted">还没有践行。载入示例看看,或新建一个。</p>
+      <p id="sample-note" class="note" hidden>带「合成示例」标记的是虚构数据;年化是假设,不是预测。</p>
+      <button type="button" class="btn btn-primary btn-block" id="new-btn" aria-expanded="false" aria-controls="new-panel">新建践行</button>
+    </section>
+    <section class="card" id="new-panel" hidden aria-label="新建践行">
+      <h2>新建践行</h2>
+      <form id="new-form" novalidate>
+        <label>名称<input id="f-name" type="text" maxlength="60" placeholder="例如:每日写作"></label>
+        <div class="field-row">
+          <label>类型
+            <select id="f-type">
+              <option value="quantity">数量型(字数、分钟、页)</option>
+              <option value="count">次数型(完成几次)</option>
+              <option value="amount">金额型(定投)</option>
+            </select>
+          </label>
+          <label>单位<input id="f-unit" type="text" maxlength="10" value="字"></label>
+        </div>
+        <div class="field-row">
+          <label>固定规则
+            <select id="f-kind">
+              <option value="daily">每天</option>
+              <option value="weekly">每周 N 次</option>
+              <option value="monthly">每月固定日</option>
+            </select>
+          </label>
+          <label id="f-n-wrap" hidden>每周几次<input id="f-n" type="number" min="1" max="7" step="1" value="3"></label>
+          <label id="f-day-wrap" hidden>每月几日<input id="f-day" type="number" min="1" max="31" step="1" value="1"></label>
+        </div>
+        <div class="field-row">
+          <label>每次定额<input id="f-amount" type="number" min="0" step="any" value="500"></label>
+          <label>开始日期<input id="f-start" type="date"></label>
+        </div>
+        <label>止损规则(可选,只记录,不执行)<textarea id="f-stop" rows="2" maxlength="500" placeholder="例如:连续 3 天没做,先降低定额,不停止记录"></textarea></label>
+        <p id="f-error" class="form-error" role="alert" hidden></p>
+        <div class="row-actions">
+          <button type="submit" class="btn btn-primary">创建</button>
+          <button type="button" class="btn btn-quiet" id="f-cancel">取消</button>
+        </div>
+      </form>
+    </section>
+  </aside>
+
+  <main class="main">
+    <section id="empty-state" class="card empty">
+      <h2>先有规则,再谈长期</h2>
+      <p>这里记录的是「你有没有按规则做」,不是行情,也不推荐任何标的。</p>
+      <ol class="steps">
+        <li>点「载入示例」,看三种践行(数量型、次数型、金额型)长什么样。</li>
+        <li>或点「新建践行」,写下固定规则和每次定额。</li>
+        <li>每天点一次「按规则完成」,缺勤会自动显示为「未执行」。</li>
+      </ol>
+      <p>以前导出过 JSON 备份(一种文本格式的数据文件)的话,可以直接恢复:</p>
+      <div class="row-actions"><button type="button" class="btn btn-quiet" id="empty-import">从 JSON 备份恢复</button></div>
+    </section>
+
+    <div id="detail" hidden>
+      <section class="card" id="detail-head"></section>
+
+      <nav class="tabs" role="tablist" aria-label="视图">
+        <button type="button" class="tab" role="tab" data-tab="log" aria-selected="true">记录</button>
+        <button type="button" class="tab" role="tab" data-tab="grow" aria-selected="false">复利视图</button>
+        <button type="button" class="tab" role="tab" data-tab="export" aria-selected="false">导出与备份</button>
+      </nav>
+
+      <div class="panel" id="panel-log">
+        <section class="card" id="guard"></section>
+        <section class="card" id="record-card">
+          <h3>记录</h3>
+          <div class="record-grid">
+            <div>
+              <p class="muted">今天:<span id="today-label"></span></p>
+              <button type="button" class="btn btn-primary btn-big" id="do-today">按规则完成</button>
+            </div>
+            <form id="rec-form" novalidate>
+              <div class="field-row">
+                <label>日期(可补录过去)<input id="rec-date" type="date" aria-describedby="rec-msg"></label>
+                <label>实际值<input id="rec-value" type="number" min="0" step="any" aria-describedby="rec-msg"></label>
+              </div>
+              <button type="submit" class="btn btn-quiet" id="rec-submit">记录这一天</button>
+            </form>
+          </div>
+          <p id="rec-msg" class="form-error" role="alert" hidden></p>
+          <div id="overwrite-confirm" class="banner banner-warn" role="alertdialog" aria-labelledby="overwrite-text" hidden>
+            <span id="overwrite-text"></span>
+            <span class="row-actions"><button type="button" class="btn btn-danger" id="ow-yes">确认覆盖</button><button type="button" class="btn btn-quiet" id="ow-no">取消</button></span>
+          </div>
+        </section>
+        <section class="card" id="stats"></section>
+        <section class="card" id="heat"></section>
+        <section class="card" id="missed"></section>
+        <section class="card" id="recent"></section>
+        <section class="card" id="end-area"></section>
+      </div>
+
+      <div class="panel" id="panel-grow" hidden>
+        <section class="card" id="compound-card">
+          <h3>金额型复利视图</h3>
+          <p class="note"><strong>年化是你自己的假设,不是预测。</strong>年化假设(%)指假设每年增长的比例,0 表示不增长。本页不接行情、不推荐标的、不承诺收益。</p>
+          <div id="compound-controls">
+            <div class="field-row">
+              <label>年化假设(%)<input id="rate-input" type="number" step="any" min="-99" max="1000" value="0"></label>
+              <label><span id="periods-label">向前推算期数</span><input id="periods-input" type="number" step="1" min="1" max="600" value="12" aria-describedby="periods-hint"></label>
+            </div>
+            <p id="periods-hint" class="muted"></p>
+            <div class="row-actions">
+              <button type="button" class="btn btn-quiet" id="rate0">年化 0%</button>
+              <button type="button" class="btn btn-quiet" id="rate6">年化 6%</button>
+            </div>
+          </div>
+          <div id="compound-out"></div>
+        </section>
+        <section class="card" id="growth-card">
+          <h3>每天进步一点点</h3>
+          <p class="muted">输入每日进步率和天数,算出 (1+r)<sup>n</sup>,并和「隔天才做」对比。纯算术,不是预测。</p>
+          <div class="field-row">
+            <label>每日进步率(%)<input id="g-rate" type="number" step="any" min="-50" max="20" value="1"></label>
+            <label>天数<input id="g-days" type="number" step="1" min="0" max="3650" value="365"></label>
+          </div>
+          <div id="g-out"></div>
+        </section>
+      </div>
+
+      <div class="panel" id="panel-export" hidden>
+        <section class="card">
+          <h3>践行记录 CSV</h3>
+          <p class="muted">导出全部践行的全部记录。以 = + - @ 开头的文字会自动加单引号前缀,防止表格软件当作公式执行。</p>
+          <button type="button" class="btn btn-primary" id="export-csv">导出践行记录 CSV</button>
+        </section>
+        <section class="card">
+          <h3>月度总结 Markdown</h3>
+          <div class="field-row">
+            <label>月份<input id="md-month" type="month"></label>
+          </div>
+          <p id="md-hint" class="form-error" hidden>请选择有效的月份。</p>
+          <button type="button" class="btn btn-primary" id="export-md">导出月度总结 Markdown</button>
+          <pre id="md-preview" class="preview" aria-label="Markdown 预览"></pre>
+        </section>
+        <section class="card">
+          <h3>JSON 备份与导入</h3>
+          <p class="muted">不同设备的数据不互通,换设备请用 JSON 备份。导入会替换当前全部数据;文件有任何一处不合法就整份拒绝。</p>
+          <div class="row-actions">
+            <button type="button" class="btn btn-primary" id="export-json">导出全部践行 JSON 备份</button>
+          </div>
+          <p class="muted">恢复备份请用页面顶部的「导入 JSON 备份」,空白状态下也能用。</p>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

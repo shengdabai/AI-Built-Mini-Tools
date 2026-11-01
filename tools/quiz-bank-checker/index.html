@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>题库答案核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>题库答案核对</h1>
+    <p>这个工具检查选择题题库：导入后自动查出答案越界、题号重复、答案字母分布失衡等问题，并可打乱选项、导出试卷。第一步：点「载入合成示例」看一遍，或在下面粘贴你的题库。问题分两级：阻断（必须先修复）和警告（建议人工复核）。数据只留在本机浏览器。</p>
+  </div>
+  <div class="app-header__actions">
+    <button id="load-sample" type="button" class="primary">载入合成示例</button>
+    <button id="clear-open" type="button" class="ghost">清空题库与打乱结果</button>
+  </div>
+</header>
+
+<div id="clear-confirm" class="banner banner--danger" role="alertdialog" aria-labelledby="clear-msg" hidden>
+  <span id="clear-msg">确定清空当前题库和打乱结果吗?此操作不能撤销,建议先导出原题库 CSV。</span>
+  <button id="clear-yes" type="button" class="danger">确认清空题库与打乱结果</button>
+  <button id="clear-no" type="button">取消</button>
+</div>
+<div id="sample-confirm" class="banner banner--danger" role="alertdialog" aria-labelledby="sample-msg" hidden>
+  <span id="sample-msg">载入合成示例会替换当前内容，且不能撤销。确定替换吗？</span>
+  <button id="sample-yes" type="button" class="danger">确认替换</button>
+  <button id="sample-no" type="button">取消</button>
+</div>
+<div id="sample-badge" class="banner banner--info" role="status" hidden><strong>当前题库是合成示例（不是真实题目）。</strong>清空或导入自己的题库后，这条提示消失；导出的文件名与内容也带「合成示例」。</div>
+<div id="save-alert" class="banner banner--danger" role="alert" hidden></div>
+<div id="toast" class="banner banner--info" role="status" hidden></div>
+
+<main class="layout">
+  <div class="col-main">
+    <details id="import-details" class="panel" open>
+      <summary><h2>导入题库</h2></summary>
+      <div class="panel__body">
+        <p class="hint">导入前会先预览，确认后才替换当前题库。支持 CSV（用逗号分隔列的表格文本）、TSV（用制表符分隔列，从 Excel 复制出来就是这种），第一行为列名；也可粘贴纯文本块：<code>1. 题干</code>、<code>A. 选项</code>、<code>答案:B</code>,题与题之间空一行。</p>
+        <fieldset class="row">
+          <legend class="sr-only">导入格式</legend>
+          <label><input type="radio" name="fmt" value="csv" checked> CSV / TSV</label>
+          <label><input type="radio" name="fmt" value="text"> 纯文本块</label>
+          <label class="file-label">选择文件 <input id="import-file" type="file" accept=".csv,.tsv,.txt,text/plain,text/csv"></label>
+        </fieldset>
+        <label for="import-text" class="field-label">粘贴内容</label>
+        <textarea id="import-text" rows="7" spellcheck="false" placeholder="题号,题干,A,B,C,D,答案,知识点,难度" aria-describedby="import-errors"></textarea>
+        <div class="row">
+          <button id="parse-btn" type="button" class="primary">解析并预览</button>
+        </div>
+        <ul id="import-errors" class="msg-list msg-list--danger" hidden></ul>
+        <div id="mapping" class="mapping" hidden>
+          <h3>确认列映射</h3>
+          <div class="mapping__grid">
+            <label>题号列 <select id="map-id"></select></label>
+            <label>题干列 <select id="map-stem"></select></label>
+            <label>答案列 <select id="map-answer"></select></label>
+            <label>知识点列 <select id="map-topic"></select></label>
+            <label>难度列 <select id="map-difficulty"></select></label>
+          </div>
+          <fieldset>
+            <legend>选项列(至少选 2 列,按列顺序对应 A、B、C…)</legend>
+            <div id="map-options" class="row"></div>
+          </fieldset>
+          <div class="row"><button id="import-btn" type="button" class="primary">按此映射解析并预览</button></div>
+        </div>
+        <div id="import-preview" class="banner banner--danger" role="alertdialog" aria-labelledby="import-preview-text" hidden>
+          <span id="import-preview-text"></span>
+          <button id="import-confirm-yes" type="button" class="danger">确认导入</button>
+          <button id="import-confirm-no" type="button">取消导入</button>
+        </div>
+      </div>
+    </details>
+
+    <section class="panel" aria-labelledby="cards-h">
+      <div class="panel__head">
+        <h2 id="cards-h">题目</h2>
+        <div class="row">
+          <div id="view-switch" class="seg" role="group" aria-label="查看版本" hidden>
+            <button id="view-original" type="button" aria-pressed="true">原题库</button>
+            <button id="view-shuffled" type="button" aria-pressed="false">打乱后</button>
+          </div>
+          <label><input id="only-issues" type="checkbox"> 只看有问题的题</label>
+        </div>
+      </div>
+      <div id="empty" class="empty">
+        <p><strong>还没有题库。</strong></p>
+        <p>在上方粘贴 CSV 或纯文本块并点「解析并预览」，或点右上角「载入合成示例」看一遍完整流程。</p>
+      </div>
+      <ol id="cards" class="cards"></ol>
+    </section>
+  </div>
+
+  <aside class="col-side" aria-label="检查结果与导出">
+    <section class="panel">
+      <div class="panel__head"><h2>概览</h2></div>
+      <div id="stats" class="panel__body"><p class="hint">导入题库后显示题数、答案字母、知识点与难度分布。</p></div>
+    </section>
+    <section class="panel">
+      <div class="panel__head"><h2>问题清单</h2><span id="issue-count" class="count"></span></div>
+      <div id="issues" class="panel__body"><p class="hint">没有题库,无可检查内容。</p></div>
+    </section>
+    <section class="panel">
+      <div class="panel__head"><h2>修复与导出</h2></div>
+      <div class="panel__body">
+        <label for="seed" class="field-label">随机种子(相同种子得到相同顺序)</label>
+        <div class="row">
+          <input id="seed" type="text" value="期中" maxlength="40">
+          <button id="shuffle-btn" type="button" class="primary">打乱选项并同步答案</button>
+        </div>
+        <p id="shuffle-note" class="hint"></p>
+        <p id="export-version" class="hint"></p>
+        <p id="export-summary" class="hint" role="status"></p>
+        <div id="export-confirm" class="banner banner--danger" role="alertdialog" aria-labelledby="export-confirm-text" hidden>
+          <span id="export-confirm-text"></span>
+          <button id="export-confirm-yes" type="button" class="danger">仍然导出</button>
+          <button id="export-confirm-no" type="button">先去修复</button>
+        </div>
+        <div class="stack">
+          <button id="export-issues-md" type="button">导出问题清单 Markdown</button>
+          <button id="export-issues-csv" type="button">导出问题清单 CSV</button>
+          <button id="export-bank-csv" type="button">导出原题库 CSV（含知识点与难度）</button>
+          <button id="export-shuffled-csv" type="button">导出打乱后题库 CSV</button>
+          <button id="export-exam" type="button">导出试卷 Markdown（答案另页）</button>
+        </div>
+        <p class="hint">问题清单与试卷按当前所见版本导出，「导出打乱后题库 CSV」始终导出打乱结果，「导出原题库 CSV」始终导出原题库。以 = + - @ 开头的单元格会加单引号前缀,防止表格软件当作公式执行。</p>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

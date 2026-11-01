@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作业量规反馈</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>作业量规反馈</h1>
+    <p class="tagline">老师先定义量规（按评分项目、权重和等级组成的评分表），再给每个评分项目选等级，工具按模板拼出反馈。第一步：点「载入合成示例」看一遍，或到「量规」页新建。不自动判分、不调 AI。</p>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" id="load-sample" class="btn">载入合成示例</button>
+    <button type="button" id="top-import" class="btn">导入 JSON 备份(先预览再合并)</button>
+  </div>
+</header>
+
+<div id="save-warn" class="banner banner-danger" role="alert" hidden>
+  <strong>未保存:</strong><span id="save-warn-text">浏览器拒绝写入本地存储,刷新后本页数据会丢失。</span>
+  请立即到「数据」页下载 JSON 备份。
+</div>
+<div id="sample-confirm" class="confirm banner-confirm" hidden>
+  <p id="sample-confirm-text"></p>
+  <div class="row">
+    <button type="button" id="sample-confirm-yes" class="btn btn-danger">确认覆盖</button>
+    <button type="button" id="sample-confirm-no" class="btn">取消</button>
+  </div>
+</div>
+<p id="sample-badge" class="banner banner-confirm" role="status" hidden><strong>当前数据含合成示例(不是真实学员)。</strong>清空，或只保留自己的数据后，这条提示消失；导出的文件名与内容也带「合成示例」。</p>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<nav class="tabs" aria-label="功能" role="tablist">
+  <button type="button" role="tab" data-tab="grade" class="tab is-active" aria-selected="true">批改</button>
+  <button type="button" role="tab" data-tab="rubric" class="tab" aria-selected="false">量规</button>
+  <button type="button" role="tab" data-tab="students" class="tab" aria-selected="false">学员记录</button>
+  <button type="button" role="tab" data-tab="phrases" class="tab" aria-selected="false">措辞模板</button>
+  <button type="button" role="tab" data-tab="data" class="tab" aria-selected="false">数据</button>
+</nav>
+
+<main>
+  <!-- 批改 -->
+  <section id="panel-grade" class="panel" data-panel="grade">
+    <div id="g-empty" class="empty" hidden>
+      <h2>还没有量规</h2>
+      <p>先载入合成示例看一遍完整流程，或到「量规」页新建自己的量规（每个评分项目写 4 个等级的描述和一句反馈）。</p>
+      <div class="row">
+        <button type="button" class="btn btn-primary" data-act="sample">载入合成示例</button>
+        <button type="button" class="btn" data-act="goto-rubric">去新建量规</button>
+      </div>
+    </div>
+    <div id="g-work" class="split">
+      <form id="g-form" class="card" autocomplete="off" novalidate>
+        <h2>批改一份作业</h2>
+        <div class="fields">
+          <label class="field"><span>量规</span><select id="g-rubric"></select></label>
+          <label class="field"><span>学员代号</span><input id="g-student" list="g-students" maxlength="40" placeholder="如 S01"></label>
+          <datalist id="g-students"></datalist>
+          <label class="field"><span>作业标题</span><input id="g-title" maxlength="100" placeholder="如 自我介绍"></label>
+          <label class="field"><span>日期</span><input id="g-date" type="date" aria-describedby="g-base"></label>
+          <label class="field"><span>反馈语言</span>
+            <select id="g-lang"><option value="zh">中文</option><option value="en">English</option></select></label>
+        </div>
+        <p id="g-base" class="hint"></p>
+        <div id="g-dims" class="dims"></div>
+      </form>
+      <aside class="card preview" aria-labelledby="g-preview-h">
+        <h2 id="g-preview-h">反馈预览</h2>
+        <div class="scorebox">
+          <div><span class="muted">加权总分</span><strong id="g-total" class="score">-</strong><span class="muted"> / 100</span></div>
+          <span id="g-grade" class="grade" data-grade="">-</span>
+        </div>
+        <p id="g-status" class="hint" role="status"></p>
+        <p id="g-rule" class="hint"></p>
+        <pre id="g-feedback" class="feedback" tabindex="0" role="region" aria-label="反馈正文"></pre>
+        <div class="row">
+          <button type="submit" form="g-form" id="g-save" class="btn btn-primary">保存本次批改</button>
+          <button type="button" id="g-copy-md" class="btn">复制反馈 Markdown</button>
+          <button type="button" id="g-copy-txt" class="btn">复制反馈纯文本</button>
+          <button type="button" id="g-dl-md" class="btn">下载反馈 Markdown 文件</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 量规 -->
+  <section id="panel-rubric" class="panel" data-panel="rubric" hidden>
+    <div class="card">
+      <h2>量规编辑</h2>
+      <p class="hint">每个维度（评分项目）必须有 4 个等级（1 最低，4 最高），各写一句描述和一句反馈模板。权重之和不必是 100，总分按比例归一（每项权重除以权重合计）。</p>
+      <div class="row row-between">
+        <label class="field inline"><span>当前量规</span><select id="r-select"></select></label>
+        <div class="row">
+          <button type="button" id="r-new" class="btn">新建量规</button>
+          <button type="button" id="r-copy" class="btn">复制当前量规</button>
+          <button type="button" id="r-delete" class="btn btn-danger">删除</button>
+        </div>
+      </div>
+      <div id="r-confirm" class="confirm" hidden>
+        <p id="r-confirm-text"></p>
+        <div class="row">
+          <button type="button" id="r-confirm-yes" class="btn btn-danger">确认删除</button>
+          <button type="button" id="r-confirm-no" class="btn">取消</button>
+        </div>
+      </div>
+      <div id="r-editor" hidden>
+        <label class="field"><span>量规名称</span><input id="r-name" maxlength="60"></label>
+        <div id="r-dims" class="dims"></div>
+        <div class="row">
+          <button type="button" id="r-add-dim" class="btn">添加维度</button>
+          <button type="button" id="r-save" class="btn btn-primary">保存量规</button>
+          <button type="button" id="r-discard" class="btn">放弃修改</button>
+          <span id="r-dirty" class="hint"></span>
+        </div>
+        <p id="r-weights" class="hint"></p>
+        <ul id="r-errors" class="errors" role="alert" hidden></ul>
+      </div>
+      <p id="r-empty" class="hint">还没有量规。点「新建量规」,或载入示例。</p>
+    </div>
+  </section>
+
+  <!-- 学员记录 -->
+  <section id="panel-students" class="panel" data-panel="students" hidden>
+    <div class="split split-narrow-left">
+      <div class="card">
+        <h2>学员</h2>
+        <ul id="s-list" class="student-list"></ul>
+        <p id="s-empty" class="hint">还没有批改记录。到「批改」页保存一次,或载入示例。</p>
+      </div>
+      <div class="card" id="s-detail" hidden>
+        <div class="row row-between">
+          <h2 id="s-name">-</h2>
+          <button type="button" id="s-csv" class="btn">导出该学员记录 CSV</button>
+        </div>
+        <p class="hint">等级 1–4:数字越大越好。格内条形长度对应等级,颜色分四档。「变化」为最近一次减最早一次。</p>
+        <div class="legend" aria-label="等级图例">
+          <span class="badge" data-level="1">1 需重点改进</span><span class="badge" data-level="2">2 接近要求</span>
+          <span class="badge" data-level="3">3 达到要求</span><span class="badge" data-level="4">4 表现突出</span>
+        </div>
+        <div class="table-wrap"><table id="s-table" class="grid"></table></div>
+        <h3>历次记录</h3>
+        <ul id="s-records" class="records"></ul>
+        <div id="s-confirm" class="confirm" hidden>
+          <p id="s-confirm-text"></p>
+          <div class="row">
+            <button type="button" id="s-confirm-yes" class="btn btn-danger">确认删除</button>
+            <button type="button" id="s-confirm-no" class="btn">取消</button>
+          </div>
+        </div>
+        <div id="s-view" hidden>
+          <h3 id="s-view-title">反馈</h3>
+          <pre id="s-view-text" class="feedback" tabindex="0"></pre>
+          <div class="row">
+            <button type="button" id="s-view-copy" class="btn">复制反馈 Markdown</button>
+            <button type="button" id="s-view-close" class="btn">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 措辞模板 -->
+  <section id="panel-phrases" class="panel" data-panel="phrases" hidden>
+    <div class="card">
+      <h2>措辞模板</h2>
+      <p class="hint">反馈由这些句子拼接而成，可直接改成你的口吻。占位符（写成 {名称} 的位置，生成反馈时自动替换成对应内容）：{name} 学员代号、{title} 作业标题、{dim} 维度名、{weight} 归一后权重、{level} 等级数字、{levelName} 等级名、{fb} 该等级反馈模板。</p>
+      <div class="row">
+        <label class="field inline"><span>语言</span>
+          <select id="t-lang"><option value="zh">中文</option><option value="en">English</option></select></label>
+        <button type="button" id="t-save" class="btn btn-primary">保存措辞模板</button>
+        <button type="button" id="t-reset" class="btn">恢复该语言默认措辞</button>
+        <span id="t-dirty" class="hint" role="status"></span>
+      </div>
+      <div id="t-leave" class="confirm" role="alertdialog" hidden>
+        <p id="t-leave-text"></p>
+        <div class="row">
+          <button type="button" id="t-leave-save" class="btn btn-primary">保存措辞模板并离开</button>
+          <button type="button" id="t-leave-discard" class="btn btn-danger">放弃修改并离开</button>
+          <button type="button" id="t-leave-stay" class="btn">留在本页继续编辑</button>
+        </div>
+      </div>
+      <div id="t-fields" class="fields fields-wide"></div>
+    </div>
+  </section>
+
+  <!-- 数据 -->
+  <section id="panel-data" class="panel" data-panel="data" hidden>
+    <div class="card">
+      <h2>数据</h2>
+      <p class="hint">数据只存在本浏览器(localStorage 键 rubricfb.v1)。换设备或清缓存前请先导出 JSON 备份。JSON 是包含全部量规、记录和措辞模板的备份文件；CSV 是可用 Excel 打开的表格。</p>
+      <div class="row">
+        <button type="button" id="d-backup" class="btn btn-primary">导出 JSON 备份</button>
+        <button type="button" id="d-csv" class="btn">导出全部记录 CSV</button>
+      </div>
+      <h3>导入备份</h3>
+      <p class="hint">按 id 合并：新 id 追加，同 id 替换。文件有任何一处不合法就整份拒绝并说明原因；合法时先预览新增和替换的数量，确认后才写入。</p>
+      <input id="d-file" type="file" accept="application/json,.json" aria-label="选择备份文件">
+      <div id="d-import-confirm" class="confirm" role="alertdialog" hidden>
+        <p id="d-import-text"></p>
+        <div class="row">
+          <button type="button" id="d-import-yes" class="btn btn-danger">确认按预览合并导入</button>
+          <button type="button" id="d-import-no" class="btn">取消导入</button>
+        </div>
+      </div>
+      <div id="d-result" class="hint" role="status"></div>
+      <h3>清空数据</h3>
+      <button type="button" id="d-clear" class="btn btn-danger">清空全部量规、批改记录与措辞模板</button>
+      <div id="d-confirm" class="confirm" hidden>
+        <p>将删除全部量规、批改记录与自定义措辞模板,不可恢复。建议先下载备份。</p>
+        <div class="row">
+          <button type="button" id="d-confirm-yes" class="btn btn-danger">确认清空全部量规、批改记录与措辞模板</button>
+          <button type="button" id="d-confirm-no" class="btn">取消</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">反馈是模板拼接,措辞由老师维护;工具不评判内容是否正确。示例数据全部为合成。</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

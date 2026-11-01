@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模板批量填充</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__title">
+    <h1>模板批量填充</h1>
+    <p>写一份带 {{字段}} 的文字模板,粘贴一张 CSV 或 TSV 表(逗号或制表符分隔的表格,第一行是字段名),逐条预览,再批量输出成合并文本、ZIP 压缩包或 CSV。第一步:点右上角「载入合成示例」看效果,或在左边写模板、粘贴数据。数据只留在这台电脑的浏览器里。</p>
+  </div>
+  <div class="topbar__actions">
+    <button type="button" id="load-sample" class="btn btn--light">载入合成示例</button>
+    <button type="button" id="btn-import" class="btn btn--light">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="import-file" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    <button type="button" id="btn-clear" class="btn btn--light">清空模板、数据和输出设置</button>
+  </div>
+</header>
+
+<div id="save-warning" class="banner banner--danger" role="alert" hidden>
+  <span id="save-warning-text">未保存。</span>
+  <button type="button" id="btn-warn-export" class="btn btn--small">导出当前内存里的模板、数据和输出设置(JSON 备份)</button>
+</div>
+<div id="recovery-warning" class="banner banner--warn" role="alert" hidden>
+  <span id="recovery-warning-text"></span>
+  <span class="banner__buttons">
+    <button type="button" id="btn-raw-download" class="btn btn--small" hidden>下载损坏存档原文(逐字保留)</button>
+    <button type="button" id="btn-recovery-export" class="btn btn--small">导出当前内存里的模板、数据和输出设置(JSON)</button>
+  </span>
+</div>
+<div id="clear-confirm" class="banner banner--warn" role="alertdialog" aria-label="确认清空" hidden>
+  <span><strong>确定清空吗?</strong><span id="clear-scope"></span>此操作不能撤销,建议先导出 JSON 备份。</span>
+  <span class="banner__buttons">
+    <button type="button" id="btn-clear-yes" class="btn btn--small btn--danger">确认清空</button>
+    <button type="button" id="btn-clear-no" class="btn btn--small">取消</button>
+  </span>
+</div>
+<div id="sample-confirm" class="banner banner--warn" role="alertdialog" aria-label="确认载入示例" hidden>
+  <span><strong id="sample-lead">这个操作会替换你现有的内容:</strong><span id="sample-scope"></span>。确认前现有内容不变;替换后不能撤销,建议先导出 JSON 备份。</span>
+  <span class="banner__buttons">
+    <button type="button" id="btn-sample-yes" class="btn btn--small btn--danger">确认替换</button>
+    <button type="button" id="btn-sample-no" class="btn btn--small">取消</button>
+  </span>
+</div>
+<div id="sample-badge" class="banner banner--warn" hidden><span><strong>当前内容是合成示例,不是真实数据。</strong>导出的 CSV、JSON 备份里会标注,ZIP 和合并文本的文件名带「合成示例」前缀。改动模板或数据、清空或导入你自己的备份后这条提示消失。</span></div>
+<div id="import-confirm" class="banner banner--warn" role="alertdialog" aria-label="确认导入备份" hidden>
+  <span><strong>备份文件通过校验:</strong><span id="import-scope"></span></span>
+  <span class="banner__buttons">
+    <button type="button" id="btn-import-yes" class="btn btn--small btn--danger">确认导入并替换</button>
+    <button type="button" id="btn-import-no" class="btn btn--small">取消,保留现有内容</button>
+  </span>
+</div>
+<div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
+
+<main class="workspace">
+  <section class="column" aria-labelledby="h-input">
+    <h2 id="h-input">模板与数据</h2>
+
+    <div class="field">
+      <label for="tpl">模板(纯文本)</label>
+      <p class="hint">用 {{字段}} 占位(字段就是数据第一行的列名);{{字段|默认值}} 在为空时用默认值;{{#if 字段}}…{{/if}} 条件块只在字段非空时输出,不能嵌套。</p>
+      <textarea id="tpl" rows="12" spellcheck="false" placeholder="例如:{{姓名}}同学家长您好,……"></textarea>
+      <ul id="err-tpl" class="field-error-list" hidden></ul>
+    </div>
+
+    <div class="field">
+      <label for="data">数据(粘贴 CSV 或 TSV,首行是字段名)</label>
+      <p class="hint" id="delim-hint">分隔符会自动识别(逗号、制表符、分号)。</p>
+      <textarea id="data" rows="10" spellcheck="false" placeholder="姓名,班级&#10;小明,三年二班"></textarea>
+      <ul id="err-data" class="field-error-list" hidden></ul>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="file-pattern">文件名模板</label>
+        <input id="file-pattern" type="text" value="{{姓名}}-通知.txt" autocomplete="off">
+        <ul id="err-file-pattern" class="field-error-list" hidden></ul>
+        <p class="hint">ZIP 里每条一个文件,文件名按这个模板生成;也可以用 {{字段}}。</p>
+      </div>
+      <div class="field">
+        <label for="separator">合并文本的分隔线</label>
+        <input id="separator" type="text" value="----------" autocomplete="off">
+      </div>
+    </div>
+  </section>
+
+  <section class="column" aria-labelledby="h-out">
+    <h2 id="h-out">检查、预览与输出</h2>
+
+    <div id="empty-guide" class="guide" hidden>
+      <p><strong>还没有内容。</strong>点上方「载入合成示例」看一个家长通知的完整流程,或在左边写模板、粘贴数据。示例里预设了一个数据错误(某一行多了一列),用来演示报错和修复。</p>
+      <div class="btn-row"><button type="button" id="btn-import-2" class="btn">导入 JSON 备份(恢复以前导出的内容)</button></div>
+      <details class="terms"><summary>名词解释</summary>
+        <ul class="plain-list">
+          <li>占位符:模板里写成 {{字段}} 的位置,输出时被每一行数据里的值替换。</li>
+          <li>条件块:{{#if 字段}}…{{/if}},字段不为空时才输出中间的文字。</li>
+          <li>CSV / TSV:逗号 / 制表符分隔的表格文本,可以直接从 Excel 或 WPS 复制粘贴。</li>
+          <li>ZIP:把每一条输出打包成一个压缩包(本工具只打包不压缩),每条一个文本文件。</li>
+        </ul>
+      </details>
+    </div>
+
+    <div id="check-panel" class="panel" aria-live="polite"></div>
+
+    <div class="panel">
+      <div class="panel__head">
+        <h3>逐条预览</h3>
+        <div class="pager">
+          <button type="button" id="prev" class="btn btn--small" aria-label="上一条">上一条</button>
+          <span id="pos" class="pager__pos">0 / 0</span>
+          <button type="button" id="next" class="btn btn--small" aria-label="下一条">下一条</button>
+          <button type="button" id="next-miss" class="btn btn--small">下一条未填</button>
+        </div>
+      </div>
+      <p id="preview-status" class="status"></p>
+      <div id="preview" class="preview" tabindex="0" role="region" aria-label="当前条的渲染结果"></div>
+      <p id="file-name" class="hint"></p>
+    </div>
+
+    <div class="panel">
+      <h3>输出清单</h3>
+      <div class="table-wrap">
+        <table class="list">
+          <thead><tr><th scope="col">序号</th><th scope="col">数据行</th><th scope="col">文件名</th><th scope="col">未填</th><th scope="col">文件名里的空字段</th></tr></thead>
+          <tbody id="row-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>批量输出与导出</h3>
+      <p id="export-hint" class="status"></p>
+      <div class="btn-row">
+        <button type="button" id="btn-merged" class="btn btn--primary">下载合并文本 TXT</button>
+        <button type="button" id="btn-zip" class="btn btn--primary">下载 ZIP(每条一个文本文件)</button>
+        <button type="button" id="btn-csv" class="btn">导出渲染结果 CSV</button>
+        <button type="button" id="btn-json" class="btn">导出 JSON 备份(模板、数据和输出设置)</button>
+      </div>
+      <div class="field import">
+        <p id="import-msg" class="status" role="status"></p>
+      </div>
+      <details class="caliber"><summary>这些数字怎么算的</summary>
+        <p>「条」= 数据里除表头外的每一行,一条输出一个文件。「未填」= 模板里没有值也没有默认值的占位符个数,同一个字段在模板里出现几次就算几处;条件块没有输出的部分不计。文件名里的空字段另算(见「检查」)。模板、数据或文件名模板任何一处有错误时,预览和输出都会停用,没有输出清单。</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<script src="sample-data.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

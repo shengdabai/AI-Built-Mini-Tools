@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JTBD 任务陈述板</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">本机数据 · 不联网 · 不打分</span>
+      <h1>JTBD 任务陈述板</h1>
+      <p class="muted">JTBD(Jobs To Be Done)指用户要完成的任务。先写清情境、想做的事和期望结果,再记录换方案的理由与顾虑。第一步:点「新建任务」,或点「载入示例」看一个填好的例子。</p>
+    </div>
+    <div class="row top-actions">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="new-job" type="button" class="primary">新建任务</button>
+      <button id="import-backup" type="button">导入 JSON 备份</button>
+      <input id="import-file" type="file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+      <button id="clear-all" type="button" class="danger">清空全部任务与证据</button>
+    </div>
+  </header>
+
+  <div id="save-banner" class="banner banner-danger" role="alert" hidden>
+    <strong>未保存</strong>
+    <span id="save-banner-text"></span>
+    <button id="banner-export" type="button">现在导出 JSON 备份</button>
+  </div>
+  <div id="load-banner" class="banner banner-warn" role="alert" hidden>
+    <strong>本机已存的数据没通过校验,没有载入</strong>
+    <span id="load-banner-text"></span>
+    <button id="banner-raw" type="button">下载原始数据</button>
+  </div>
+
+  <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <strong id="confirm-text"></strong>
+    <div class="row"><button id="confirm-yes" type="button" class="danger">确认</button><button id="confirm-no" type="button">取消</button></div>
+  </div>
+  <div id="import-errors" class="banner banner-danger" role="alert" hidden>
+    <strong>导入被拒绝,当前数据没有改动</strong>
+    <ul id="import-error-list"></ul>
+  </div>
+
+  <section id="empty" class="empty panel" hidden>
+    <h2>还没有任务</h2>
+    <p>一个任务 = 一句"当[情境],我想[动机],以便[期望结果]",加上四种力量和现有替代方案。</p>
+    <div class="row"><button id="empty-sample" type="button" class="primary">载入示例</button><button id="empty-new" type="button">新建任务</button><button id="empty-import" type="button">导入已有 JSON 备份</button></div>
+    <p class="muted">以前导出过备份?点「导入已有 JSON 备份」恢复;文件不合法会整份拒绝,不会改动当前数据。</p>
+  </section>
+
+  <div id="work" hidden>
+    <section class="job-bar panel" aria-label="当前任务">
+      <label>当前任务<select id="job-select"></select></label>
+      <label class="grow">任务名称<input id="job-title" type="text" placeholder="例如:课后给家长发反馈"></label>
+      <button id="delete-job" type="button" class="danger">删除任务</button>
+    </section>
+
+    <nav class="tabs" role="tablist" aria-label="视图">
+      <button role="tab" data-tab="statement" aria-selected="true" type="button">陈述与四力</button>
+      <button role="tab" data-tab="compare" aria-selected="false" type="button">候选对比</button>
+      <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+    </nav>
+
+    <section id="tab-statement" class="layout" role="tabpanel">
+      <div class="main-col">
+        <div class="panel">
+          <h2>任务陈述</h2>
+          <div class="sentence">
+            <label><span class="lead">当</span><textarea id="f-situation" rows="2" placeholder="情境:什么时候、在哪、发生了什么"></textarea></label>
+            <label><span class="lead">我想</span><textarea id="f-motivation" rows="2" placeholder="动机:想完成的事(别写产品或功能)"></textarea></label>
+            <label><span class="lead">以便</span><textarea id="f-outcome" rows="2" placeholder="期望结果:怎样算做到了(数字、时间、能/不再)"></textarea></label>
+          </div>
+          <div class="grid-2">
+            <label>使用者<input id="f-user" type="text"></label>
+            <label>购买者<input id="f-buyer" type="text"></label>
+            <label>触发时刻<input id="f-trigger" type="text"></label>
+            <label>成功的可观察结果<input id="f-success" type="text"></label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>四力对照</h2>
+          <p class="muted">四力指影响用户换方案的四个因素:推力(现状的不满)和拉力(新方案的吸引)推动切换;惯性(现状的习惯)和焦虑(对新方案的担心)阻碍切换。</p>
+          <div class="forces">
+            <div class="force-col">
+              <h3 class="col-title">推动切换</h3>
+              <div id="force-push" class="force force-push"></div>
+              <div id="force-pull" class="force force-pull"></div>
+            </div>
+            <div class="force-col">
+              <h3 class="col-title">阻碍切换</h3>
+              <div id="force-inertia" class="force force-inertia"></div>
+              <div id="force-anxiety" class="force force-anxiety"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>当前替代方案</h2>
+          <p class="muted">现在没有这个工具时,这件事靠什么完成?</p>
+          <div id="alt-list" class="alt-list"></div>
+          <button id="add-alt" type="button">添加替代方案</button>
+        </div>
+      </div>
+
+      <aside class="side-col">
+        <div class="panel sticky">
+          <h2>规则检查</h2>
+          <ul id="issues" class="issues"></ul>
+          <div id="balance" class="balance"></div>
+          <h3>证据情况</h3>
+          <div id="stats" class="stats"></div>
+          <label class="words">方案词表(逗号分隔,动机里出现就警告)
+            <input id="f-words" type="text">
+          </label>
+        </div>
+      </aside>
+    </section>
+
+    <section id="tab-compare" class="panel" role="tabpanel" hidden>
+      <div class="row between">
+        <h2>候选方案对比</h2>
+        <button id="add-candidate" type="button" class="primary">添加候选方案</button>
+      </div>
+      <p class="muted">只显示每个候选覆盖了哪些力量,不算总分,不排名。</p>
+      <div id="candidate-list" class="candidate-list"></div>
+      <h3>覆盖矩阵</h3>
+      <div id="matrix" class="matrix-wrap"></div>
+    </section>
+
+    <section id="tab-export" class="panel" role="tabpanel" hidden>
+      <h2>导出与数据</h2>
+      <div class="export-actions">
+        <button id="export-md" type="button" class="primary">下载任务陈述卡 Markdown</button>
+        <button id="export-csv" type="button">下载覆盖矩阵 CSV</button>
+        <button id="export-json" type="button">导出全部任务 JSON 备份</button>
+      </div>
+      <p class="muted">要恢复备份,请点页面顶部的「导入 JSON 备份」(任何时候都能用,包括还没有任务时)。</p>
+      <p id="export-note" class="muted" role="status"></p>
+      <h3>任务陈述卡预览</h3>
+      <pre id="md-preview" class="preview"></pre>
+    </section>
+  </div>
+  <footer class="foot muted">框架帮你问对问题,不替代访谈。证据类型「自己猜」请如实标注。数据只存在这台电脑的浏览器里。<span id="save-status" class="save-status" role="status"></span></footer>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

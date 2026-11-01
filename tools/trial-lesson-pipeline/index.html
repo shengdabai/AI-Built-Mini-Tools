@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>试课跟进看板</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-head">
+  <div class="app-head__title">
+    <h1>试课跟进看板</h1>
+    <p class="muted">给独立语言教师跟踪咨询、试课和付款进度:第一步点「载入合成示例」看 14 条虚构线索,或点「新建线索」记下第一位咨询的学员。数据只存在本机浏览器。</p>
+  </div>
+  <div class="app-head__meta">
+    <p class="today-badge">今天 <strong id="today-label"></strong><span id="today-fixed" hidden></span></p>
+    <label class="inline-field">超过几天未联系时提醒
+      <input id="n-input" type="number" min="1" max="60" step="1" value="3" aria-describedby="n-hint n-error">
+      <span id="n-hint" class="muted">天(1–60)</span>
+    </label>
+    <span id="n-error" class="field-error" role="alert" hidden></span>
+  </div>
+</header>
+
+<nav class="toolbar" aria-label="操作">
+  <button type="button" class="btn btn--primary" id="btn-new">新建线索</button>
+  <button type="button" class="btn" id="btn-sample">载入合成示例</button>
+  <button type="button" class="btn" id="btn-report" title="生成本周的周报预览,可下载或复制">导出周报 Markdown</button>
+  <button type="button" class="btn" id="btn-csv" title="CSV:逗号分隔的表格文件,可用 Excel 打开">导出线索表 CSV</button>
+  <button type="button" class="btn" id="btn-json" title="JSON:保存全部线索和设置的文本文件,用于备份和恢复">导出 JSON 备份</button>
+  <button type="button" class="btn" id="btn-import">导入 JSON 备份(校验后确认替换)</button>
+  <input id="file-import" class="visually-hidden" type="file" accept="application/json,.json" tabindex="-1" aria-hidden="true">
+  <button type="button" class="btn btn--danger" id="btn-clear">清空全部线索</button>
+</nav>
+
+ <p id="save-warning" class="save-warning" role="alert" hidden>未保存:浏览器拒绝写入本机存储,当前改动只在这个页面里。关闭或刷新页面会丢失,请立即点「导出 JSON 备份」保存(导出的是页面里现有的全部线索和设置)。</p>
+
+<p id="export-hint" class="status status--error" role="status" hidden>表单里有未保存的编辑:请先保存或取消,再导出周报、线索表或 JSON 备份。</p>
+<p id="import-error" class="save-warning" role="alert" hidden></p>
+<p id="sample-badge" class="sample-badge" hidden><strong>合成示例:</strong>当前线索含虚构的示例数据。导出的周报、线索表和 JSON 备份都会标注「合成示例」;清空或导入真实备份后此标记消失。</p>
+
+<p id="status" class="status" role="status" aria-live="polite"></p>
+
+<section id="replace-confirm" class="panel panel--danger" hidden aria-labelledby="replace-title">
+  <h2 id="replace-title">确认替换现有数据?</h2>
+  <p id="replace-text"></p>
+  <div class="row">
+    <button type="button" class="btn btn--danger" id="replace-yes">确认替换</button>
+    <button type="button" class="btn" id="replace-no">取消,保留现有数据</button>
+  </div>
+</section>
+
+<section id="clear-confirm" class="panel panel--danger" hidden aria-labelledby="clear-title">
+  <h2 id="clear-title">确认清空全部线索?</h2>
+  <p>现有 <span id="clear-count"></span> 会全部删除(含每条线索的阶段记录),无法恢复。超期阈值设置会保留。建议先点「导出 JSON 备份」。</p>
+  <div class="row">
+    <button type="button" class="btn btn--danger" id="clear-yes">确认清空</button>
+    <button type="button" class="btn" id="clear-no">取消</button>
+  </div>
+</section>
+
+<section id="form-panel" class="panel" hidden aria-labelledby="form-title">
+  <h2 id="form-title">新建线索</h2>
+  <form id="lead-form" novalidate>
+    <div class="form-grid">
+      <label class="field">姓名或代号
+        <input id="f-name" name="name" type="text" required maxlength="40" autocomplete="off">
+      </label>
+      <label class="field">来源渠道
+        <select id="f-channel" name="channel"></select>
+      </label>
+      <label class="field" id="f-channel-other-wrap" hidden>其他渠道名称
+        <input id="f-channel-other" type="text" maxlength="20" autocomplete="off">
+      </label>
+      <label class="field">学习目标
+        <select id="f-goal" name="goal"></select>
+      </label>
+      <label class="field">所在时区(文本记录,不换算)
+        <input id="f-timezone" name="timezone" type="text" maxlength="30" placeholder="如 UTC+1" autocomplete="off">
+      </label>
+      <label class="field">阶段
+        <select id="f-stage" name="stage"></select>
+      </label>
+      <label class="field" id="f-loss-wrap" hidden>流失原因
+        <select id="f-loss"></select>
+      </label>
+      <label class="field">首次联系日期
+        <input id="f-first" name="firstContact" type="date" required>
+      </label>
+      <label class="field">旧最近联系锚点(未核实)
+        <input id="f-last" name="lastContact" type="date" required>
+      </label>
+      <label class="field">下一步动作
+        <input id="f-next-action" name="nextAction" type="text" maxlength="60" autocomplete="off">
+      </label>
+      <label class="field">下一步计划日期
+        <input id="f-next-date" name="nextDate" type="date">
+      </label>
+      <label class="field">报价金额
+        <input id="f-amount" name="quoteAmount" type="number" min="0" step="any" inputmode="decimal">
+      </label>
+      <label class="field">币种
+        <select id="f-currency" name="quoteCurrency"></select>
+      </label>
+      <label class="field field--wide">备注
+        <textarea id="f-note" name="note" rows="2" maxlength="300"></textarea>
+      </label>
+    </div>
+    <p id="form-error" class="form-error" role="alert" hidden></p>
+    <div class="row">
+      <button type="submit" class="btn btn--primary" id="form-save">保存</button>
+      <button type="button" class="btn" id="form-cancel">取消</button>
+      <button type="button" class="btn btn--danger" id="form-delete" hidden>删除这条线索</button>
+    </div>
+    <div id="delete-confirm" class="inline-confirm" hidden>
+      <p id="delete-text">确认删除这条线索?删除后无法恢复。</p>
+      <div class="row">
+        <button type="button" class="btn btn--danger" id="delete-yes">确认删除</button>
+        <button type="button" class="btn" id="delete-no">取消</button>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section id="contact-panel" class="panel" hidden aria-labelledby="contact-title">
+  <h2 id="contact-title">记录跟进</h2>
+  <p id="contact-context" class="muted"></p>
+  <form id="contact-form" novalidate>
+    <div class="form-grid">
+      <label class="field">联系日期
+        <input id="c-date" type="date" required>
+      </label>
+      <label class="field">联系渠道
+        <select id="c-channel"></select>
+      </label>
+      <label class="field field--wide">联系摘要
+        <input id="c-summary" type="text" maxlength="120" autocomplete="off" required placeholder="记录沟通了什么">
+      </label>
+      <label class="field field--wide">联系结果
+        <input id="c-outcome" type="text" maxlength="120" autocomplete="off" required placeholder="记录对方反馈或当前结论">
+      </label>
+      <label class="field field--wide">下一步(可选)
+        <input id="c-next" type="text" maxlength="120" autocomplete="off">
+      </label>
+    </div>
+    <p id="contact-error" class="form-error" role="alert" hidden></p>
+    <div class="row">
+      <button type="submit" class="btn btn--primary" id="contact-review">检查并继续</button>
+      <button type="button" class="btn" id="contact-cancel">取消</button>
+    </div>
+    <div id="contact-confirm" class="inline-confirm inline-confirm--neutral" hidden>
+      <p id="contact-confirm-text"></p>
+      <div class="row">
+        <button type="button" class="btn btn--primary" id="contact-yes">确认追加记录</button>
+        <button type="button" class="btn" id="contact-no">返回修改</button>
+      </div>
+    </div>
+    <div id="contact-archive-confirm" class="inline-confirm" hidden>
+      <p>确认归档这条联系事件？记录仍保留在备份中，但不再参与最近联系日期和七天统计。</p>
+      <div class="row">
+        <button type="button" class="btn btn--danger" id="contact-archive-yes">确认归档</button>
+        <button type="button" class="btn" id="contact-archive-no">取消</button>
+      </div>
+    </div>
+  </form>
+  <h3 class="timeline-title">联系时间线</h3>
+  <ol id="contact-timeline" class="timeline"></ol>
+</section>
+
+<section id="report-panel" class="panel" hidden aria-labelledby="report-title">
+  <h2 id="report-title">周报预览(Markdown:一种纯文本格式)</h2>
+  <pre id="report-text" class="report" tabindex="0"></pre>
+  <div class="row">
+    <button type="button" class="btn btn--primary" id="report-download">下载周报 Markdown</button>
+    <button type="button" class="btn" id="report-copy">复制周报 Markdown</button>
+    <button type="button" class="btn" id="report-close">关闭周报预览</button>
+  </div>
+</section>
+
+<section id="empty" class="panel panel--empty" hidden aria-labelledby="empty-title">
+  <h2 id="empty-title">还没有线索</h2>
+  <p>第一步:点「载入合成示例」看 14 条虚构线索如何在看板上流转;已有备份就点「导入 JSON 备份」;也可以点「新建线索」记下第一位咨询的学员。</p>
+  <div class="row">
+    <button type="button" class="btn btn--primary" id="empty-sample">载入合成示例</button>
+    <button type="button" class="btn" id="empty-import">导入 JSON 备份</button>
+    <button type="button" class="btn" id="empty-new">新建线索</button>
+  </div>
+</section>
+
+<main>
+  <section id="today-zone" class="zone" aria-labelledby="today-title">
+    <h2 id="today-title" tabindex="-1">今天要跟 <span class="count" id="today-count">0</span></h2>
+    <p class="muted" id="today-hint"></p>
+    <ul id="today-list" class="today-list"></ul>
+  </section>
+
+  <section id="board-zone" class="zone" aria-labelledby="board-title">
+    <h2 id="board-title">看板</h2>
+    <div id="board" class="board"></div>
+  </section>
+
+  <section id="stats-zone" class="zone" aria-labelledby="stats-title">
+    <h2 id="stats-title">统计</h2>
+    <p class="muted">下面每个数字都按「当前所有线索」计算(单位:条线索);空结果会写明原因。</p>
+    <div id="stats" class="stats"></div>
+  </section>
+</main>
+
+<footer class="app-foot muted">示例数据均为合成;时区只是文本记录,不换算;无提醒推送。</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

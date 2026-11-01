@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 提问规格生成器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>AI 提问规格生成器</h1>
+    <p>分五步把一个任务写成带限定条件和验收标准的提示词。不调用任何模型,数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-backup">导出全部规格 JSON 备份</button>
+    <label class="btn btn--on-dark" for="file-import">导入 JSON 备份</label>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部规格</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-confirm-yes">确认</button>
+      <button type="button" class="btn btn--secondary" id="btn-confirm-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p id="save-warning-text"></p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份</button>
+  </div>
+  <div id="load-error" class="notice notice--danger" role="alert" hidden>
+    <div>
+      <p><strong>浏览器里保存的旧数据读取失败,已按空白库打开。</strong>旧存档没有被删除;在你点「放弃旧存档」之前,新的改动不会写入,避免覆盖它。原因:</p>
+      <ul id="load-error-list" class="plain-list"></ul>
+    </div>
+    <div class="row">
+      <button type="button" class="btn btn--secondary" id="btn-raw-download">下载原始存档 JSON</button>
+      <button type="button" class="btn btn--danger" id="btn-raw-discard">放弃旧存档并开始新库</button>
+    </div>
+  </div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden>
+    <div>
+      <p><strong>导入被拒绝,现有数据没有改动。</strong>原因:</p>
+      <ul id="import-error-list" class="plain-list"></ul>
+    </div>
+    <button type="button" class="btn btn--secondary" id="btn-import-error-close">知道了</button>
+  </div>
+  <p id="flash" class="notice notice--ok" role="status" hidden></p>
+
+  <div class="layout">
+    <aside class="panel library" aria-label="规格库">
+      <h2>规格库</h2>
+      <label class="field">搜索
+        <input type="search" id="search" placeholder="标题、标签、任务、验收……" autocomplete="off">
+      </label>
+      <div id="tag-filter" class="row" role="group" aria-label="按标签筛选"></div>
+      <ul id="spec-list" class="spec-list"></ul>
+      <p id="spec-list-empty" class="empty" hidden>没有匹配的规格。</p>
+      <div class="library__new">
+        <button type="button" class="btn btn--primary" id="btn-new">新建空白规格</button>
+        <label class="field">从模板新建
+          <select id="tpl-select"></select>
+        </label>
+        <button type="button" class="btn btn--secondary" id="btn-from-tpl">用这个模板新建</button>
+        <p class="hint">模板只提供结构,不含任何领域结论,【】处要你自己填。</p>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有规格</h2>
+        <p>这个工具按李笑来的三步提问法组织:先让 AI 梳理限定条件,再要它给出答案质量的验证标准,最后整合成一份专用提示词,开新对话使用。</p>
+        <ol class="steps">
+          <li>写任务一句话:谁、要什么、给谁用。</li>
+          <li>列限定条件和可检验的验收标准。</li>
+          <li>看质量检查,复制完整提示词,或先复制「第一轮先问」。</li>
+        </ol>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button>
+          <button type="button" class="btn btn--secondary" id="btn-new-2">新建空白规格</button>
+        </div>
+      </div>
+
+      <div id="editor" hidden>
+        <section class="panel" aria-labelledby="editor-title">
+          <div class="panel__head">
+            <h2 id="editor-title">填写规格</h2>
+            <button type="button" class="btn btn--danger-ghost btn--small" id="btn-delete">删除这份规格</button>
+          </div>
+          <div class="form-grid">
+            <label class="field">规格名称
+              <input type="text" id="f-title" autocomplete="off">
+            </label>
+            <label class="field">标签(用逗号分隔)
+              <input type="text" id="f-tags" autocomplete="off">
+            </label>
+          </div>
+
+          <div class="progress" aria-hidden="true"><div class="progress__bar" id="progress-bar"></div></div>
+          <p class="hint" id="progress-text" aria-live="polite"></p>
+          <nav class="steps-nav" id="steps-nav" aria-label="步骤"></nav>
+
+          <div id="step-1" class="step" hidden>
+            <label class="field">任务一句话:谁、要什么、给谁用
+              <textarea id="f-task" rows="3" placeholder="例如:我是产品经理,要一份竞品对比表,给老板在周会上看。"></textarea>
+            </label>
+          </div>
+
+          <div id="step-2" class="step" hidden>
+            <h3>限定条件</h3>
+            <p class="hint">范围、禁止项、格式、长度、语言、受众、已知事实、已有材料。每条只写一件事。</p>
+            <div id="constraint-rows" class="rows"></div>
+            <div class="row"><button type="button" class="btn btn--secondary" id="btn-add-constraint">添加一条限定条件</button></div>
+          </div>
+
+          <div id="step-3" class="step" hidden>
+            <h3>验收标准</h3>
+            <p class="hint">每条必须能被观察或数出来,并写明怎么检验。</p>
+            <div id="criteria-rows" class="rows"></div>
+            <div class="row"><button type="button" class="btn btn--secondary" id="btn-add-criterion">添加一条验收标准</button></div>
+          </div>
+
+          <div id="step-4" class="step" hidden>
+            <label class="field">输出结构(可选):标题、字段、示例
+              <textarea id="f-output" rows="4" placeholder="例如:一句话结论 / 对比表 / 未查到清单"></textarea>
+            </label>
+          </div>
+
+          <div id="step-5" class="step" hidden>
+            <div class="form-grid">
+              <label class="field">角色(可选)
+                <input type="text" id="f-role" autocomplete="off" placeholder="例如:谨慎的选型顾问">
+              </label>
+              <label class="field">语气(可选)
+                <input type="text" id="f-tone" autocomplete="off" placeholder="例如:平实、不夸张">
+              </label>
+            </div>
+          </div>
+
+          <div class="row">
+            <button type="button" class="btn btn--secondary" id="btn-prev">上一步</button>
+            <button type="button" class="btn btn--primary" id="btn-next">下一步</button>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="check-title">
+          <div class="panel__head">
+            <h2 id="check-title">质量检查</h2>
+            <span class="hint" id="check-summary"></span>
+          </div>
+          <ul id="check-list" class="check-list"></ul>
+        </section>
+
+        <section class="panel" aria-labelledby="out-title">
+          <div class="panel__head">
+            <h2 id="out-title">生成的提示词</h2>
+            <div class="row" role="group" aria-label="选择版本">
+              <button type="button" class="tab" id="tab-full" aria-pressed="true">完整提示词</button>
+              <button type="button" class="tab" id="tab-first" aria-pressed="false">第一轮先问</button>
+            </div>
+          </div>
+          <p class="hint" id="out-hint"></p>
+          <textarea id="out-text" class="out-text" readonly aria-label="生成的提示词"></textarea>
+          <div class="row">
+            <button type="button" class="btn btn--primary" id="btn-copy">一键复制</button>
+            <button type="button" class="btn btn--secondary" id="btn-dl-md">下载提示词 Markdown</button>
+            <button type="button" class="btn btn--secondary" id="btn-dl-json">下载这份规格 JSON</button>
+            <button type="button" class="btn btn--secondary" id="btn-dl-csv">下载全部规格 CSV</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <p class="app-footer">模板是结构不是答案;提示词质量仍取决于你写的限定与验收。</p>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

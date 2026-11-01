@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中文排版清洁器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>中文排版清洁器</h1>
+    <p>粘贴 Markdown(用符号标记标题和链接的文本格式)或纯文本,按规则统一中文排版,逐行查看改了什么。文字只在这台电脑的浏览器里处理,不联网。第一步:把文字粘贴到下方「原文」框,或点「载入示例」。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空原文、保护词和规则设置</button>
+  </div>
+</header>
+
+<div class="notices">
+  <div id="confirm-sample" class="notice notice--warn" role="alertdialog" aria-labelledby="confirm-sample-title" hidden>
+    <p id="confirm-sample-title"><strong id="sample-detail">替换当前内容?</strong><span id="sample-scope">载入示例会覆盖现在的原文和保护词,此操作不能撤销。</span></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="sample-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="sample-no">取消</button>
+    </div>
+  </div>
+  <div id="confirm-clear" class="notice notice--warn" role="alertdialog" aria-labelledby="confirm-clear-title" hidden>
+    <p id="confirm-clear-title"><strong>确认清空?</strong>原文、保护词和规则设置(含引号风格、保留强制换行)都会恢复为初始状态,此操作不能撤销。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="clear-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即点「导出清洁结果 Markdown」保存结果,原文请自行另存。</p>
+    <button type="button" class="btn btn--danger" id="btn-warning-export">导出清洁结果 Markdown</button>
+  </div>
+  <div id="load-warning" class="notice notice--warn" role="status" hidden></div>
+</div>
+
+<div class="shell">
+  <aside class="rules" aria-labelledby="rules-title">
+    <h2 id="rules-title">规则</h2>
+    <p class="muted">每条规则可单独开关,默认全开。</p>
+    <ul class="rule-list" id="rule-list"></ul>
+
+    <section class="words" aria-labelledby="words-title">
+      <h2 id="words-title">保护词</h2>
+      <p class="muted">保护词:品牌名、产品名等必须原样保留的词。词内部不做任何处理,词两侧也不自动加空格。区分大小写。</p>
+      <form id="word-form" class="word-form" autocomplete="off">
+        <label class="visually-hidden" for="word-input">新的保护词</label>
+        <input type="text" id="word-input" class="field" placeholder="例如 B站、iPhone" maxlength="60">
+        <button type="submit" class="btn btn--secondary">添加</button>
+      </form>
+      <p id="word-msg" class="field-msg" role="status" hidden></p>
+      <ul class="word-list" id="word-list"></ul>
+    </section>
+  </aside>
+
+  <main class="work">
+    <section id="empty-guide" class="panel panel--guide" hidden>
+      <h2>还没有内容</h2>
+      <p>在下方左侧框里粘贴文字,右侧立刻出结果。想先看效果,点「载入示例」。</p>
+    </section>
+
+    <div class="editor-pair">
+      <section class="pane" aria-labelledby="in-title">
+        <div class="pane__head">
+          <h2 id="in-title">原文</h2>
+          <span class="muted" id="input-count">0 字</span>
+        </div>
+        <textarea id="input" class="editor" aria-labelledby="in-title" spellcheck="false" placeholder="在这里粘贴 Markdown 或纯文本"></textarea>
+        <p id="sample-tag" class="tag tag--sample" hidden>当前是合成示例,内容为虚构演示。</p>
+      </section>
+      <section class="pane" aria-labelledby="out-title">
+        <div class="pane__head">
+          <h2 id="out-title">清洁结果</h2>
+          <div class="row">
+            <button type="button" class="btn btn--primary" id="btn-copy">复制清洁结果文本</button>
+            <button type="button" class="btn btn--secondary" id="btn-export">导出清洁结果 Markdown</button>
+          </div>
+        </div>
+        <textarea id="output" class="editor editor--result" readonly spellcheck="false" placeholder="结果会显示在这里" aria-label="清洁结果"></textarea>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="sum-title">
+      <h2 id="sum-title">改动统计</h2>
+      <p id="summary" class="summary">暂无改动。</p>
+    </section>
+
+    <section class="panel" aria-labelledby="diff-title">
+      <h2 id="diff-title">逐行差异</h2>
+      <p class="muted">左边是原文,右边是结果。被删的字符有删除线,新增的字符有下划线,同时带底色。</p>
+      <p id="diff-empty" class="muted" hidden></p>
+      <ul class="diff-list" id="diff-list"></ul>
+      <p id="diff-note" class="muted" hidden></p>
+    </section>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

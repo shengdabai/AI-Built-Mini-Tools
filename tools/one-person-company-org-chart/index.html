@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一人公司组织图 · 把 AI 员工画成一棵树</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <h1>一人公司组织图</h1>
+      <p class="muted">用节点记录每个 AI 岗位的职责、输入和输出,再生成 AGENT.md 文本。页面只保存设计,不创建或运行 Agent。Agent 指能自己执行任务的 AI 程序;AGENT.md 是写给它的岗位说明文件;数据流指“谁的输出交给谁”。第一步:点右上角「载入示例」看效果,或在空状态里创建根节点「我」。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="import-btn-top" type="button" aria-describedby="import-msg">导入 JSON 备份</button>
+      <button id="clear-data" type="button" class="danger-outline">清空全部节点</button>
+      <input id="import-file" type="file" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner banner-danger" role="alert" hidden>
+    <strong>未保存</strong>
+    <span id="save-warning-text"></span>
+    <button id="save-warning-export" type="button">导出当前内存中的全部节点 JSON 备份</button>
+  </div>
+  <p id="sample-banner" class="banner banner-info" hidden>合成示例:当前节点是虚构的演示数据,不是真实配置。</p>
+  <p id="today-note" class="banner banner-info" hidden></p>
+  <div id="sample-confirm" class="confirm" hidden>
+    <strong>载入示例会替换当前的 <span id="sample-confirm-count">0</span> 个节点<span id="sample-confirm-draft"></span>。</strong>
+    <span class="muted">建议先在「骨架与导出」里导出 JSON 备份。</span>
+    <div class="row"><button id="sample-confirm-yes" type="button" class="danger">确认替换</button><button id="sample-confirm-no" type="button">保留当前数据</button></div>
+  </div>
+  <div id="clear-confirm" class="confirm" hidden>
+    <strong id="clear-confirm-text">确认清空全部节点?</strong>
+    <span class="muted">清空后无法恢复。</span>
+    <div class="row"><button id="clear-confirm-yes" type="button" class="danger">确认清空</button><button id="clear-confirm-no" type="button">取消</button></div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <nav class="tabs" role="tablist" aria-label="功能">
+    <button role="tab" type="button" data-tab="chart" aria-selected="true">组织图</button>
+    <button role="tab" type="button" data-tab="stats" aria-selected="false">自动化度与检查</button>
+    <button role="tab" type="button" data-tab="export" aria-selected="false">骨架与导出</button>
+  </nav>
+
+  <main>
+    <section id="tab-chart" class="tab-panel" role="tabpanel">
+      <div id="empty-guide" class="empty" hidden>
+        <h2>还没有组织图</h2>
+        <p>先建一个根节点「我」,再一个岗位一个岗位往下加;也可以载入一份合成示例看看长什么样;已有备份文件可点右上角「导入 JSON 备份」。</p>
+        <div class="row">
+          <button id="empty-root" type="button" class="primary">创建根节点「我」</button>
+          <button id="empty-sample" type="button">载入示例</button>
+        </div>
+      </div>
+
+      <div id="chart-area" hidden>
+        <div class="toolbar">
+          <div class="row">
+            <button id="mode-new" type="button" class="primary">添加节点</button>
+            <button id="fold-all" type="button">全部折叠</button>
+            <button id="unfold-all" type="button">全部展开</button>
+          </div>
+          <ul class="legend" aria-label="图例">
+            <li><span class="swatch s-root"></span>根节点</li>
+            <li><span class="swatch s-idea"></span>设想</li>
+            <li><span class="swatch s-configured"></span>已配置</li>
+            <li><span class="swatch s-running"></span>在跑</li>
+            <li><span class="swatch s-disabled"></span>停用</li>
+          </ul>
+        </div>
+        <p id="chart-note" class="muted"></p>
+        <div id="chart-wrap" class="chart-wrap" tabindex="-1" aria-label="组织图">
+          <div id="stage" class="stage">
+            <svg id="links" class="links" aria-hidden="true" focusable="false"></svg>
+            <div id="nodes"></div>
+          </div>
+        </div>
+        <ul id="tree-list" class="tree-list" aria-label="组织列表"></ul>
+
+        <form id="node-form" class="panel" autocomplete="off" novalidate>
+          <div class="panel-head">
+            <h2 id="form-title">添加节点</h2>
+            <div id="quick-status" class="seg" role="group" aria-label="快速改状态" hidden>
+              <button type="button" data-status="idea">设想</button>
+              <button type="button" data-status="configured">已配置</button>
+              <button type="button" data-status="running">在跑</button>
+              <button type="button" data-status="disabled">停用</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label>岗位名<input id="f-name" type="text" placeholder="例如:写作 Agent" aria-describedby="form-msg"></label>
+            <label>上级节点<select id="f-parent"></select></label>
+            <label class="span-2">职责(一句)<input id="f-duty" type="text" placeholder="例如:按选题写出初稿"></label>
+            <label>触发方式
+              <select id="f-trigger-kind">
+                <option value="manual">手动</option>
+                <option value="cron">定时(cron 文本)</option>
+                <option value="event">事件</option>
+              </select>
+            </label>
+            <label>触发说明(定时填 cron,即定时任务的时间写法)<input id="f-trigger-text" type="text" placeholder="例如:每天 8:00(0 8 * * *)"></label>
+            <label>状态
+              <select id="f-status">
+                <option value="idea">设想</option>
+                <option value="configured">已配置</option>
+                <option value="running">在跑</option>
+                <option value="disabled">停用</option>
+              </select>
+            </label>
+            <label>在跑起始日(可选)<input id="f-since" type="date" aria-describedby="form-msg"></label>
+            <label>每周人工干预次数(自己估)<input id="f-weekly" type="number" min="0" step="1" value="0" aria-describedby="form-msg"></label>
+          </div>
+          <fieldset>
+            <legend>人工干预点(需要你亲自处理的环节;没有就选「无」)</legend>
+            <div id="f-int" class="check-grid">
+              <label class="check"><input type="checkbox" value="approve">审批</label>
+              <label class="check"><input type="checkbox" value="proofread">校对</label>
+              <label class="check"><input type="checkbox" value="pay">付款</label>
+              <label class="check"><input type="checkbox" value="none" checked>无</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>输入:从谁来</legend>
+            <div id="f-inputs" class="check-grid"></div>
+          </fieldset>
+          <fieldset>
+            <legend>输出:给谁</legend>
+            <div id="f-outputs" class="check-grid"></div>
+          </fieldset>
+          <p id="form-msg" class="form-msg" role="alert" tabindex="-1" hidden></p>
+          <div class="row">
+            <button id="btn-add" type="submit" class="primary">添加这个节点</button>
+            <button id="btn-save" type="submit" class="primary" hidden>保存修改</button>
+            <button id="btn-child" type="button" hidden>为它添加下级</button>
+            <button id="btn-cancel" type="button" hidden>取消选择</button>
+            <button id="btn-delete" type="button" class="danger-outline" hidden>删除节点</button>
+          </div>
+          <div id="delete-confirm" class="confirm" hidden>
+            <strong>确认删除「<span id="delete-name"></span>」?</strong>
+            <span id="delete-detail" class="muted">其他节点对它的输入输出引用会一并移除。</span>
+            <div class="row"><button id="delete-yes" type="button" class="danger">确认删除</button><button id="delete-no" type="button">取消</button></div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="tab-stats" class="tab-panel" role="tabpanel" hidden>
+      <div class="cards">
+        <div class="card"><span class="card-label">在跑节点</span><strong id="stat-running" class="card-value">0</strong><span id="stat-running-sub" class="muted"></span></div>
+        <div class="card"><span class="card-label">含人工干预点的节点占比</span><strong id="stat-ratio" class="card-value">0%</strong><span id="stat-ratio-sub" class="muted"></span></div>
+        <div class="card"><span class="card-label">每周人工干预次数(自己估)</span><strong id="stat-weekly" class="card-value">0</strong><span class="muted">各节点填写值的合计</span></div>
+      </div>
+      <div class="panel">
+        <h2>下一个可去掉的干预点</h2>
+        <p id="next-candidate"></p>
+        <p class="muted">规则:状态是「在跑」、干预点含「校对」、并且在跑起始日距今天已满 30 天。多个候选时取跑得最久的。这里只按运行天数筛选,没有质量或错误率数据;是否真的取消校对,请先核对实际的错误记录。</p>
+      </div>
+      <div class="panel">
+        <h2>数据流检查</h2>
+        <ul id="flow-list" class="flow-list"></ul>
+      </div>
+    </section>
+
+    <section id="tab-export" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel">
+        <h2>Markdown 骨架</h2>
+        <p class="muted">每个岗位一个 <span class="inline-name">岗位/AGENT.md</span>,按目录树排好,复制或下载后拆到各自文件夹。骨架来自已保存的节点;表单里有未保存的修改时,下面所有导出都会暂停。</p>
+        <p id="export-lock" class="form-msg" role="status" hidden></p>
+        <p id="md-blocked" class="form-msg" role="alert" hidden></p>
+        <div class="row">
+          <button id="copy-md" type="button" class="primary">复制骨架 Markdown 文本</button>
+          <button id="dl-md" type="button">下载骨架 Markdown 文件(.md)</button>
+        </div>
+        <pre id="md-preview" class="preview" tabindex="0" aria-label="Markdown 预览"></pre>
+      </div>
+      <div class="panel">
+        <h2>导出与备份</h2>
+        <p class="muted">组织图 SVG 导出的是当前画面(折叠起来的子树不会画出来)。CSV 和 JSON 包含全部节点。</p>
+        <div class="row">
+          <button id="dl-svg" type="button">下载组织图 SVG(当前画面)</button>
+          <button id="dl-csv" type="button">下载全部节点 CSV</button>
+          <button id="dl-json" type="button">下载全部节点 JSON 备份</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>导入 JSON 备份</h2>
+        <div class="row"><button id="import-btn" type="button" aria-describedby="import-msg">选择 JSON 备份文件导入</button></div>
+        <p class="muted">导入先校验整份文件,通过后显示数量并请你确认,确认后才写入;有错就整份拒绝。</p>
+        <p id="import-msg" class="form-msg" role="alert" hidden></p>
+        <div id="import-confirm" class="confirm" hidden>
+          <strong>导入会替换当前的 <span id="import-confirm-count">0</span> 个节点。</strong>
+          <span id="import-confirm-detail" class="muted"></span>
+          <div class="row"><button id="import-yes" type="button" class="danger">确认替换</button><button id="import-no" type="button">取消导入</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot muted">数据只保存在这台电脑的浏览器里(localStorage 键 orgchart.v1)。示例数据是合成的,不是真实配置。</footer>
+</div>
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

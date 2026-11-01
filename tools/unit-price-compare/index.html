@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>采购单位比价</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>采购单位比价</h1>
+    <p>把「一箱、一袋、一桶」这些规格不同的报价,换算成同一个基准单位(质量 kg、体积 L、计数 件)再按单位价比较。第一步:点右上角「载入合成示例」看效果,或到「录入报价」页添加第一条报价。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json-top">导出 JSON 备份(可重新导入的数据文件)</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部报价和涨幅阈值设置</button>
+  </div>
+</header>
+
+<main class="shell">
+  <div id="confirm-box" class="notice notice--danger" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-confirm-yes">确认</button>
+      <button type="button" class="btn btn--secondary" id="btn-confirm-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出当前内存里的全部报价(JSON 备份)</button>
+  </div>
+  <div id="export-block" class="notice notice--warn" role="status" hidden></div>
+  <div id="today-banner" class="notice" hidden></div>
+  <div id="sample-badge" class="notice notice--warn" hidden><strong>当前数据含合成示例,不是真实报价。</strong>导出的 JSON、CSV、Markdown 里也会标注。清空或导入真实备份后这条提示消失。</div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden></div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="compare" aria-current="page">比价</button>
+    <button type="button" class="tab" data-view="entry">录入报价</button>
+    <button type="button" class="tab" data-view="all">全部报价</button>
+    <button type="button" class="tab" data-view="history">历史价格</button>
+    <button type="button" class="tab" data-view="export">导出</button>
+  </nav>
+
+  <section id="view-compare" class="view">
+    <div id="empty-guide" class="empty" hidden>
+      <h2>还没有报价</h2>
+      <p>点右上角「载入合成示例」看一遍完整流程,或到「录入报价」页添加你自己的第一条报价。</p>
+      <p>换算规则:单位价 = 包装价 ÷ (每包件数 × 每件净含量)。质量统一为 kg,体积统一为 L,计数统一为件。量纲(质量、体积、计数这三类)不同的单位不能互相比较;规格组是你自己定义的同一类商品,如「鸡蛋」「面粉」。</p>
+      <div class="row"><button type="button" class="btn btn--secondary" id="btn-import-2">导入 JSON 备份(恢复以前导出的数据)</button></div>
+    </div>
+    <div id="compare-body">
+      <div class="chips" id="group-chips" role="group" aria-label="规格组"></div>
+      <div id="rank-out"></div>
+      <details class="caliber"><summary>这些数字怎么算的</summary>
+        <p>单位价 = 包装价 ÷ (每包件数 × 每件净含量,换算到基准单位),金额保留 4 位小数计算、2 位显示。每家(供应商 + 品名)在每个「币种 × 量纲」分区里只取日期最近的一条有效报价参与排名,旧报价只在「历史价格」页出现。最低价记为 100%,其他报价写成「占最低价的百分比」,例如最低价 10、另一家 12,则显示 120%(比最低价贵 20%)。不同币种、不同量纲分开排名,互不比较,也不换汇率。缺参数的报价不排名。</p>
+      </details>
+    </div>
+  </section>
+
+  <section id="view-entry" class="view" hidden>
+    <div class="grid-2">
+      <form id="quote-form" class="card" autocomplete="off" novalidate>
+        <h2 id="form-title">添加一条报价</h2>
+        <div class="fields">
+          <label class="field">供应商<input id="f-supplier" required maxlength="60"><span class="field-error" id="err-supplier" hidden></span></label>
+          <label class="field">品名<input id="f-item" required maxlength="80"><span class="field-error" id="err-item" hidden></span></label>
+          <label class="field">规格组(同一类商品放同组,如「鸡蛋」)<input id="f-group" list="group-list" required maxlength="40"><span class="field-error" id="err-group" hidden></span></label>
+          <datalist id="group-list"></datalist>
+          <label class="field">币种<select id="f-currency"></select></label>
+          <label class="field">包装价<input id="f-price" type="number" step="any" min="0" required inputmode="decimal"><span class="field-error" id="err-price" hidden></span></label>
+          <label class="field">每包件数(整包里有几件)<input id="f-count" type="number" step="any" min="0" inputmode="decimal"><span class="field-error" id="err-count" hidden></span></label>
+          <label class="field">每件净含量<input id="f-qty" type="number" step="any" min="0" inputmode="decimal"><span class="field-error" id="err-qty" hidden></span></label>
+          <label class="field">含量单位<select id="f-unit"></select><span class="field-error" id="err-unit" hidden></span></label>
+          <label class="field">报价日期<input id="f-date" type="date" required><span class="field-error" id="err-date" hidden></span></label>
+          <label class="field">备注<input id="f-note" maxlength="120"></label>
+        </div>
+        <p id="form-error" class="field-error" role="alert" hidden></p>
+        <p id="form-preview" class="preview" aria-live="polite"></p>
+        <div class="row">
+          <button type="submit" class="btn btn--primary" id="form-submit">保存报价</button>
+          <button type="button" class="btn btn--secondary" id="form-cancel">清空表单草稿</button>
+        </div>
+      </form>
+
+      <form id="batch-form" class="card" autocomplete="off" novalidate>
+        <h2>批量粘贴</h2>
+        <p class="hint">每行一条:<code>供应商 | 品名 | 包装价 | 每包件数 | 每件净含量 | 单位</code>。可加第 7 列写规格组。后三项可留空,该行会标「缺参数」。可直接从表格复制(制表符分隔)。</p>
+        <div class="fields">
+          <label class="field">默认规格组<input id="b-group" list="group-list" maxlength="40"></label>
+          <label class="field">币种<select id="b-currency"></select></label>
+          <label class="field">报价日期<input id="b-date" type="date"></label>
+        </div>
+        <label class="field">粘贴内容<textarea id="batch-text" rows="7" spellcheck="false"></textarea></label>
+        <ul id="batch-errors" class="error-list" hidden></ul>
+        <div class="row">
+          <button type="submit" class="btn btn--primary" id="batch-submit">导入这些行(任一行有错则整批不导入)</button>
+          <button type="button" class="btn btn--secondary" id="batch-clear">清空粘贴框</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-all" class="view" hidden>
+    <div class="card">
+      <h2 id="view-all-heading" tabindex="-1">全部报价</h2>
+      <div class="table-wrap" id="all-out"></div>
+    </div>
+  </section>
+
+  <section id="view-history" class="view" hidden>
+    <div class="card">
+      <h2>历史价格</h2>
+      <div class="fields">
+        <label class="field">供应商 + 品名<select id="hist-key"></select></label>
+        <label class="field">涨幅警示阈值(%,涨幅大于它才警示)<input id="threshold" type="number" min="0" max="1000" step="any" inputmode="decimal" aria-describedby="threshold-error"><span class="field-error" id="threshold-error" hidden></span></label>
+      </div>
+      <details class="caliber"><summary>涨跌幅怎么算的</summary>
+        <p>相对上次涨跌幅 = (本次单位价 − 上一条报价的单位价) ÷ 上一条报价的单位价。「上一条」指同一供应商、同一品名、同币种、同量纲的上一条有效报价,币种或量纲不同的报价不参与比较;缺参数的报价没有单位价,既不算涨跌也不当作上一条。按未舍入的涨幅与阈值比较,显示保留 1 位小数。</p>
+      </details>
+      <div id="hist-out"></div>
+    </div>
+    <div class="card">
+      <h2>需要留意的涨价</h2>
+      <p class="hint">每个「供应商 + 品名」最近一次报价,相对同币种同量纲的上一条报价涨幅超过阈值的项目。</p>
+      <div id="warn-out"></div>
+    </div>
+  </section>
+
+  <section id="view-export" class="view" hidden>
+    <div class="card">
+      <h2>导出</h2>
+      <p class="hint">比价表包含所有规格组(每家取最近一条报价)。CSV 是表格软件能打开的逗号分隔文件,JSON 是可以重新导入本工具的备份。以 = + - @ 开头的文字会自动加单引号前缀,防止表格软件把它当公式执行。</p>
+      <p id="export-hint" class="hint" hidden></p>
+      <div class="row">
+        <button type="button" class="btn btn--primary" id="export-rank-csv">导出比价表 CSV(所有规格组)</button>
+        <button type="button" class="btn btn--primary" id="export-rank-md">导出比价表 Markdown(所有规格组)</button>
+        <button type="button" class="btn btn--secondary" id="export-all-csv">导出全部报价 CSV</button>
+        <button type="button" class="btn btn--secondary" id="export-json">导出 JSON 备份(全部报价和阈值)</button>
+      </div>
+      <h3>比价表预览(Markdown)</h3>
+      <pre id="md-preview" class="preview-box"></pre>
+    </div>
+  </section>
+
+  <footer class="footnote">
+    <p>不考虑运费、账期、损耗;不换汇率,不同币种分别排名;只比较单位价,不评品质、不推荐供应商。</p>
+  </footer>
+</main>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

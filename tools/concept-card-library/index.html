@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>概念卡片库</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>概念卡片库</h1>
+    <p>把每个概念写成一张卡:一句话定义、反例(它不是什么)、它能回答的问题,以及和其他卡片的关联。数据只存在这台电脑的浏览器里。第一步:点「载入示例」,或点「新建卡片」。</p>
+    <p id="today-fixed" class="header-note" hidden></p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-new">新建卡片</button>
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-md">导出全部卡片 Markdown</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-csv">导出全部卡片 CSV</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(替换现有卡片)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部卡片</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="replace-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <p id="replace-title"></p>
+    <div class="row">
+      <button type="button" class="btn btn--primary" id="btn-replace-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-replace-no">取消,保留现有卡片</button>
+    </div>
+  </div>
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title">确认清空全部卡片?此操作不能撤销,建议先导出 JSON 备份。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="leave-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="leave-title" hidden>
+    <p id="leave-title"><strong>表单里有尚未保存的修改。</strong>现在离开或替换数据,这些修改会丢失。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-leave-yes">放弃修改并继续</button>
+      <button type="button" class="btn btn--secondary" id="btn-leave-no">回到表单继续填写</button>
+    </div>
+  </div>
+  <p id="export-block" class="notice notice--warn" role="status" hidden>表单里有尚未保存的修改,导出已停用。请先点「保存卡片」,或放弃修改后再导出。</p>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden>
+    <div>
+      <p><strong>导入被拒绝,现有数据没有改动。</strong>原因:</p>
+      <ul id="import-error-list" class="plain-list"></ul>
+    </div>
+    <button type="button" class="btn btn--secondary" id="btn-import-error-close">知道了</button>
+  </div>
+  <div id="load-warning" class="notice notice--danger" role="alert" hidden>
+    <p id="load-warning-text"></p>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出当前全部卡片 JSON 备份(不含表单里未保存的修改)</button>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="library" aria-current="page">卡片库 <span class="count" id="count-cards">0</span></button>
+    <button type="button" class="tab" data-view="graph">关系图</button>
+    <button type="button" class="tab" data-view="review">复习 <span class="count" id="count-review">0</span></button>
+  </nav>
+
+  <main>
+    <!-- 卡片库 -->
+    <section id="view-library" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有卡片</h2>
+        <p>先点「载入示例」看一遍完整流程,或者自己建第一张:</p>
+        <ol class="steps">
+          <li>点「新建卡片」,写概念名和一句话定义(60 字以内)。</li>
+          <li>补上「不是什么」(至少 1 条反例)和「能回答的问题」(至少 1 条)。</li>
+          <li>在关联概念里填其他卡片的名字,关联会自动双向。</li>
+          <li>三问(清晰、准确、必要)全过,才能把状态切到「可用」。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+      </div>
+      <div id="library-body" hidden>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="toolbar">
+          <label class="field field--grow">搜索(名、定义、反例)
+            <input type="search" id="search-q" autocomplete="off" placeholder="例如:注意力  或  时间 资源">
+          </label>
+          <label class="field">状态
+            <select id="filter-status">
+              <option value="">全部状态</option>
+              <option value="草稿">草稿</option>
+              <option value="可用">可用</option>
+              <option value="已重写">已重写</option>
+            </select>
+            <span class="field-error" id="err-status" hidden></span>
+          </label>
+        </div>
+        <p class="hint" id="result-hint"></p>
+        <p class="notice notice--warn" id="sample-note" role="status" hidden></p>
+        <div class="card-grid" id="card-grid"></div>
+      </div>
+    </section>
+
+    <!-- 卡片详情 -->
+    <section id="view-detail" class="view" hidden>
+      <div class="row"><button type="button" class="btn btn--secondary" id="btn-detail-back">返回卡片库</button></div>
+      <article class="panel" id="detail-body"></article>
+    </section>
+
+    <!-- 编辑 -->
+    <section id="view-edit" class="view" hidden>
+      <form class="panel" id="edit-form" novalidate>
+        <h2 id="edit-title">新建卡片</h2>
+        <div id="edit-errors" class="notice notice--danger" role="alert" hidden>
+          <ul id="edit-errors-list" class="plain-list"></ul>
+        </div>
+        <div class="form-grid">
+          <label class="field">概念名(必填)
+            <input type="text" id="f-name" autocomplete="off" aria-describedby="err-name">
+            <span class="field-error" id="err-name" hidden></span>
+          </label>
+          <label class="field">状态
+            <select id="f-status" aria-describedby="err-status">
+              <option value="草稿">草稿</option>
+              <option value="可用">可用(需三问全过)</option>
+              <option value="已重写">已重写</option>
+            </select>
+          </label>
+          <label class="field field--wide">一句话定义(必填,建议 60 字以内)
+            <textarea id="f-def" class="textarea--short" aria-describedby="def-count err-def"></textarea>
+            <span class="field-error" id="err-def" hidden></span>
+            <span class="hint" id="def-count" aria-live="polite"></span>
+          </label>
+          <label class="field">不是什么(必填,每行一条反例或易混淆的东西)
+            <textarea id="f-notnot" aria-describedby="err-notNot"></textarea>
+            <span class="field-error" id="err-notNot" hidden></span>
+          </label>
+          <label class="field">能回答的问题(必填,每行一条:这个概念让我能判断什么)
+            <textarea id="f-questions" aria-describedby="err-questions"></textarea>
+            <span class="field-error" id="err-questions" hidden></span>
+          </label>
+          <div class="field field--wide">
+            <label for="f-link-input">关联概念(填其他卡片的名字;保存后对方也会关联到本卡)</label>
+            <div class="row">
+              <input type="text" id="f-link-input" list="names-list" autocomplete="off" class="input--grow" aria-describedby="err-links">
+              <button type="button" class="btn btn--secondary" id="btn-link-add">添加关联</button>
+            </div>
+            <datalist id="names-list"></datalist>
+            <div class="chips" id="link-chips"></div>
+            <span class="field-error" id="err-links" hidden></span>
+          </div>
+          <label class="field field--wide">来源(书、文章、笔记 ID,文本)
+            <input type="text" id="f-source" autocomplete="off" aria-describedby="err-source">
+            <span class="field-error" id="err-source" hidden></span>
+          </label>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn btn--primary" id="btn-edit-save">保存卡片</button>
+          <button type="button" class="btn btn--secondary" id="btn-edit-cancel">取消</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 关系图 -->
+    <section id="view-graph" class="view" hidden>
+      <div id="graph-empty" class="panel" hidden><p>还没有卡片,没有关系可看。先载入示例或新建卡片。</p></div>
+      <div id="graph-body" class="view">
+        <div class="panel">
+          <div class="panel__head">
+            <h2>邻接视图</h2>
+            <label class="field field--inline">选择中心卡片
+              <select id="graph-select"></select>
+            </label>
+          </div>
+          <p class="hint">当前卡片放在中间,与它直接关联的卡片放在两侧。点击关联卡片可切换中心。</p>
+          <div class="adj" id="adj"></div>
+        </div>
+        <div class="two-col">
+          <section class="panel" aria-labelledby="hubs-title">
+            <h2 id="hubs-title">枢纽(关联最多)</h2>
+            <ul class="plain-list" id="hub-list"></ul>
+          </section>
+          <section class="panel" aria-labelledby="islands-title">
+            <h2 id="islands-title">孤岛(没有任何关联)</h2>
+            <ul class="plain-list" id="island-list"></ul>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- 复习 -->
+    <section id="view-review" class="view" hidden>
+      <div class="panel" id="review-box"></div>
+    </section>
+  </main>
+
+  <p class="app-footer">质量门是自评:它检查结构(有无反例、有无问题、是否引用草稿概念),不验证内容是否正确。</p>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HSK 分级改写检查器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1 class="topbar-title">HSK 分级改写检查器</h1>
+    <p class="topbar-tagline">给中文教师备课用:先在左侧贴入材料并选目标 HSK(汉语水平考试)级别,再点「检查」。工具会按词着色,找出超出目标级别的词(下文简称超纲词),你改写后可再检查一次。数据只留在本机浏览器。</p>
+    <p class="today-note" id="today-note" hidden></p>
+  </div>
+</header>
+
+<section class="toolbar" aria-label="设置与数据">
+  <div class="toolbar-inner">
+    <div class="field field-inline">
+      <label for="target">目标级别</label>
+      <select id="target">
+        <option value="1">HSK 1</option>
+        <option value="2">HSK 2</option>
+        <option value="3" selected>HSK 3</option>
+        <option value="4">HSK 4</option>
+        <option value="5">HSK 5</option>
+        <option value="6">HSK 6</option>
+        <option value="7">HSK 7–9</option>
+      </select>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" class="btn btn-secondary" id="btn-sample">载入示例</button>
+      <button type="button" class="btn btn-ghost" id="btn-clear">清空原文、改写文和级别设置</button>
+    </div>
+  </div>
+  <div class="confirm" id="sample-confirm" role="alertdialog" aria-labelledby="sample-confirm-text" hidden>
+    <p id="sample-confirm-text"></p>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-danger" id="btn-sample-yes">确认替换并载入示例</button>
+      <button type="button" class="btn btn-secondary" id="btn-sample-no">取消,保留现有内容</button>
+    </div>
+  </div>
+  <div class="confirm" id="clear-confirm" role="alertdialog" aria-labelledby="clear-confirm-text" hidden>
+    <p id="clear-confirm-text">确定清空原文、改写文和目标级别设置吗?浏览器里已保存的这三项都会删除,此操作不能撤销。</p>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn-secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+</section>
+
+<div class="warning" id="save-warning" role="alert" hidden>
+  <p>未保存:浏览器存储不可用或已满,刷新页面会丢失当前输入。请先点「导出检查报告 Markdown」把当前内容存下来(导出的是页面里现有的全部内容)。</p>
+</div>
+
+<main class="workspace">
+  <section class="panel panel-input" aria-labelledby="h-src">
+    <h2 class="panel-title" id="h-src">原文</h2>
+    <p class="sample-badge" id="sample-badge" hidden>合成示例:这是作者编写的演示短文,不是真实学员或教材材料。改动原文或点清空后此标记消失。</p>
+    <label class="label" for="src">贴入要检查的中文材料</label>
+    <textarea id="src" class="textarea" spellcheck="false" aria-describedby="src-status" placeholder="例如:一段准备给 HSK 3 学员用的短文。"></textarea>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="btn-check">检查</button>
+      <p class="status" id="src-status" role="status" aria-live="polite"></p>
+    </div>
+
+    <h2 class="panel-title panel-title-spaced" id="h-rew">改写区</h2>
+    <label class="label" for="rew">在这里改写超纲词,改完点「重新检查」</label>
+    <textarea id="rew" class="textarea" spellcheck="false" aria-describedby="rew-status" placeholder="点「检查」后,这里会先放入原文副本。"></textarea>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="btn-recheck" disabled>重新检查</button>
+      <p class="status" id="rew-status" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="panel panel-result" aria-labelledby="h-result">
+    <h2 class="panel-title" id="h-result">检查结果</h2>
+
+    <div class="empty" id="empty">
+      <p class="empty-lead">还没有结果。</p>
+      <ol class="empty-steps">
+        <li>在左侧贴入中文材料,或点「载入示例」。</li>
+        <li>选好目标级别(HSK 1–6 或 7–9),点「检查」。</li>
+        <li>看右侧着色和超纲词清单,在改写区修改后点「重新检查」。</li>
+      </ol>
+    </div>
+
+    <div id="result" hidden>
+      <div class="view-switch" role="group" aria-label="查看哪一版">
+        <button type="button" class="btn btn-tab" id="view-before" aria-pressed="true">原文着色</button>
+        <button type="button" class="btn btn-tab" id="view-after" aria-pressed="false" disabled>改写后着色</button>
+      </div>
+
+      <ul class="legend" aria-label="着色图例">
+        <li><span class="swatch swatch-in"></span>目标级内</li>
+        <li><span class="swatch swatch-over1"></span>高出 1 级</li>
+        <li><span class="swatch swatch-over2"></span>高出 2 级</li>
+        <li><span class="swatch swatch-over3"></span>高出 3 级以上</li>
+        <li><span class="swatch swatch-out"></span>词表外汉字</li>
+      </ul>
+
+      <article class="colored" id="colored" aria-label="着色后的全文" tabindex="0"></article>
+
+      <div class="compare" id="compare" hidden>
+        <h3 class="sub-title">改写前 → 改写后</h3>
+        <div class="compare-grid" id="compare-grid"></div>
+      </div>
+
+      <h3 class="sub-title">统计<span class="sub-note" id="stats-which"></span></h3>
+      <dl class="stats" id="stats"></dl>
+      <details class="note" id="stats-note">
+        <summary>统计口径(单位、分母、计数条件)</summary>
+        <ul class="note-list">
+          <li>汉字数:文本里的汉字个数,不含标点、字母和数字。</li>
+          <li>词数:分词后词表内的词(重复出现的词重复计数)加词表外汉字串;相邻的词表外汉字合成一串,算 1 个词。</li>
+          <li>目标级内词占比 = 目标级内词数 ÷ 词数;词数为 0 时显示 0.0%。</li>
+          <li>超纲词数:级别高于目标级别的词,按出现次数累计;下方清单里同一个词只列一行并给出次数。</li>
+          <li>词表外词数:词表外汉字串的个数。句数、平均句长 = 汉字数 ÷ 句数,句子按 。！？；(含英文 ! ? ;)和换行切分。</li>
+        </ul>
+      </details>
+
+      <h3 class="sub-title">超纲词清单<span class="sub-note">点词可在正文里定位</span></h3>
+      <div class="table-wrap" id="over-wrap">
+        <table class="table" id="over-table">
+          <thead><tr><th scope="col">词</th><th scope="col">级别</th><th scope="col">拼音</th><th scope="col">出现次数</th></tr></thead>
+          <tbody id="over-body"></tbody>
+        </table>
+      </div>
+      <p class="muted" id="over-empty" hidden>没有超纲词。</p>
+
+      <h3 class="sub-title">词表外汉字串</h3>
+      <ul class="chips" id="out-list"></ul>
+      <p class="muted" id="out-empty" hidden>没有词表外汉字。</p>
+
+      <h3 class="sub-title">导出</h3>
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="btn-md">导出检查报告 Markdown</button>
+        <button type="button" class="btn btn-secondary" id="btn-csv">导出超纲词清单 CSV</button>
+        <p class="status" id="export-status" role="status" aria-live="polite"></p>
+      </div>
+      <div class="export-preview" id="export-preview" hidden>
+        <label class="label" for="export-text" id="export-label">导出内容</label>
+        <textarea id="export-text" class="textarea textarea-preview" readonly spellcheck="false"></textarea>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <p>词表来自 HSK 考试大纲(2025-11 发布)的文本层解析;拼音由 pypinyin 生成,不是大纲原文,多音词可能取错读音。分词用最大匹配,遇到歧义可能切错。</p>
+</footer>
+
+<script src="../_data/hsk-words.js"></script>
+<script src="../_data/pinyin-map.js"></script>
+<script src="../_shared/cn-segment.js"></script>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

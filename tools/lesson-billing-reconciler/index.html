@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课时账单核对台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>课时账单核对台</h1>
+    <p>给一对一语言教师对账用:先点「载入合成示例」看完整流程,或到「学员」页建档,再录课记录和收款,最后在「对账单」页选学员和月份。数据只存在这台电脑的浏览器里。</p>
+    <p id="today-note" class="app-header__today" hidden></p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-csv" title="CSV:逗号分隔的表格文件,可用 Excel 打开">导出课记录 CSV</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json" title="JSON:保存全部数据的文本文件,用于备份和恢复">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(校验后确认替换)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部学员、课记录和收款</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空所有学员、课记录和收款?</strong>现有 <span id="clear-confirm-count"></span> 会全部删除,此操作不能撤销,建议先点「导出 JSON 备份」。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="replace-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <p id="replace-title"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-replace-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-replace-no">取消,保留现有数据</button>
+    </div>
+  </div>
+  <p id="import-error" class="notice notice--danger" role="alert" hidden></p>
+  <p id="sample-badge" class="notice notice--warn" hidden><strong>合成示例:</strong>当前数据含虚构的学员、金额和课记录。导出的对账单、CSV、JSON 备份都会标注「合成示例」;清空或导入真实备份后此标记消失。</p>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份(页面里现有的全部数据)</button>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="statement" aria-current="page">对账单</button>
+    <button type="button" class="tab" data-view="lessons">课记录</button>
+    <button type="button" class="tab" data-view="students">学员</button>
+    <button type="button" class="tab" data-view="payments">收款</button>
+    <button type="button" class="tab" data-view="anomalies">异常 <span class="count" id="anomaly-count">0</span></button>
+  </nav>
+
+  <main>
+    <!-- 对账单 -->
+    <section id="view-statement" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有数据</h2>
+        <p>第一步:点「载入合成示例」看一遍完整流程;已有备份就点「导入 JSON 备份」。也可以按顺序操作:</p>
+        <ol class="steps">
+          <li>到「学员」建档:单价、币种、课包、取消规则。</li>
+          <li>到「课记录」录入课,或批量粘贴多行。</li>
+          <li>到「收款」记每一笔收款。</li>
+          <li>回到这里选学员和月份,生成对账单。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入合成示例</button><button type="button" class="btn btn--secondary" id="btn-import-2">导入 JSON 备份</button></div>
+      </div>
+
+      <div id="statement-body">
+        <div id="anomaly-banner" class="notice notice--warn" hidden>
+          <span id="anomaly-banner-text"></span>
+          <button type="button" class="btn btn--secondary" id="btn-goto-anomalies">查看异常列表</button>
+        </div>
+        <div class="panel">
+          <h2>生成对账单</h2>
+          <div class="form-grid">
+            <label class="field">学员
+              <select id="st-student"></select>
+            </label>
+            <label class="field">月份
+              <input type="month" id="st-month">
+            </label>
+          </div>
+        </div>
+        <div id="statement-out"></div>
+      </div>
+    </section>
+
+    <!-- 课记录 -->
+    <section id="view-lessons" class="view" hidden>
+      <div class="panel">
+        <h2>录入一节课</h2>
+        <form id="form-lesson" autocomplete="off">
+          <div class="form-grid">
+            <label class="field">日期<input type="date" id="l-date" required></label>
+            <label class="field">开始时间<input type="time" id="l-time" required value="10:00"></label>
+            <label class="field">学员<input type="text" id="l-student" list="student-list" required></label>
+            <label class="field">时长(分钟)<input type="number" id="l-minutes" min="1" max="1440" step="1" value="60" required></label>
+            <label class="field">状态
+              <select id="l-status"></select>
+            </label>
+            <label class="field">取消提前小时数(学员取消时填)<input type="number" id="l-notice" min="0" step="0.5"></label>
+            <label class="field field--wide">备注<input type="text" id="l-note"></label>
+          </div>
+          <datalist id="student-list"></datalist>
+          <div class="row"><button type="submit" class="btn btn--primary">添加课记录</button></div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>批量粘贴</h2>
+        <p class="hint">每行一节课:<strong>日期 | 学员 | 分钟 | 状态</strong>。日期后可加开始时间(如 <code>10-21 14:30</code>);状态可省略,默认「已上」;全角「｜」也可以。</p>
+        <label class="field">粘贴内容<textarea id="batch-text" rows="5"></textarea></label>
+        <div id="batch-preview" class="batch-preview" aria-live="polite"></div>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-batch-add">加入识别成功的行</button></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>全部课记录</h2>
+          <label class="field field--inline">按月份筛选<input type="month" id="l-filter-month"></label>
+        </div>
+        <div id="lessons-table"></div>
+      </div>
+    </section>
+
+    <!-- 学员 -->
+    <section id="view-students" class="view" hidden>
+      <div class="panel">
+        <h2 id="student-form-title">新增学员</h2>
+        <form id="form-student" autocomplete="off">
+          <div class="form-grid">
+            <label class="field">姓名(同名视为更新)<input type="text" id="s-name" required aria-describedby="s-name-hint" data-base-desc="s-name-hint"><span class="hint" id="s-name-hint" hidden>编辑期间姓名不能修改:姓名是学员的唯一标识,改名会新增一个档案而不是改名。要改名请删除后重建(课记录和收款里的旧名字不会自动跟着变)。</span></label>
+            <label class="field">课时单价(每小时)<input type="number" id="s-rate" min="0" step="0.01" required></label>
+            <label class="field">币种
+              <select id="s-currency"></select>
+            </label>
+            <label class="field" id="s-currency-other-wrap" hidden>其他币种代码<input type="text" id="s-currency-other" maxlength="8"></label>
+            <label class="field">课包总课时(0 为按次结算)<input type="number" id="s-package" min="0" step="0.5" value="0" required></label>
+            <label class="field">课包开始日期<input type="date" id="s-package-start"></label>
+            <label class="field">学员提前多少小时内取消要计费<input type="number" id="s-cancel" min="0" step="1" value="24" required></label>
+            <label class="field">缺席是否计费
+              <select id="s-absent">
+                <option value="1">计费(默认)</option>
+                <option value="0">不计费</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <button type="submit" class="btn btn--primary">保存学员</button>
+            <button type="button" class="btn btn--secondary" id="btn-student-reset">重置表单</button>
+          </div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>学员列表</h2>
+        <div id="students-table"></div>
+      </div>
+    </section>
+
+    <!-- 收款 -->
+    <section id="view-payments" class="view" hidden>
+      <div class="panel">
+        <h2>录入收款</h2>
+        <form id="form-payment" autocomplete="off">
+          <div class="form-grid">
+            <label class="field">日期<input type="date" id="p-date" required></label>
+            <label class="field">学员<input type="text" id="p-student" list="student-list" required></label>
+            <label class="field">金额<input type="number" id="p-amount" step="0.01" required></label>
+            <label class="field">币种
+              <select id="p-currency"></select>
+            </label>
+            <label class="field" id="p-currency-other-wrap" hidden>其他币种代码<input type="text" id="p-currency-other" maxlength="8"></label>
+            <label class="field field--wide">备注<input type="text" id="p-note"></label>
+          </div>
+          <div class="row"><button type="submit" class="btn btn--primary">添加收款</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>全部收款</h2>
+        <div id="payments-table"></div>
+      </div>
+    </section>
+
+    <!-- 异常 -->
+    <section id="view-anomalies" class="view" hidden>
+      <div class="panel">
+        <h2>全局异常列表</h2>
+        <p class="hint">检查:同一学员课时间重叠、课包余额为负、状态缺失、学员未建档、收款币种与学员币种不一致。</p>
+        <div id="anomaly-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>课时账单核对台是本地工具:无登录、无联网、无支付。示例数据为合成,不代表真实学员。</p>
+  </footer>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

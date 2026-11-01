@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>委托契约卡 · 授权前定边界，做完后算净省时</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand">
+        <span class="brand__seal" aria-hidden="true">契</span>
+        <div>
+          <h1 class="brand__name">委托契约卡</h1>
+          <p class="brand__tagline">把任务交给 AI 之前写清边界，做完之后算清净省时</p>
+        </div>
+      </div>
+      <div class="topbar__actions">
+        <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+        <button type="button" class="btn btn--on-dark-danger" id="btn-clear">清空数据</button>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="主要视图">
+      <div class="tabs__inner">
+        <a class="tab" href="#draft" data-view="draft">起草契约</a>
+        <a class="tab" href="#score" data-view="score">记分与台账 <span class="tab__count" id="tab-count">0</span></a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main" class="main">
+    <div class="storage-alert" id="storage-alert" role="alert" hidden></div>
+
+    <!-- 起草契约 -->
+    <section class="view" id="view-draft" aria-labelledby="draft-title">
+      <h2 class="visually-hidden" id="draft-title">起草契约</h2>
+      <div class="draft-grid">
+        <div class="draft-main">
+          <form class="panel" id="contract-form" autocomplete="off" novalidate>
+            <div class="panel__head">
+              <h3 class="panel__title">任务包</h3>
+              <p class="panel__hint">委派的是一段清楚的任务，不是一句无限扩张的愿望。带 <span class="req" aria-hidden="true">*</span> 为必填；长文本每项最多 2000 字。</p>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span class="field__label">任务名 <span class="req" aria-hidden="true">*</span></span>
+                <input class="input" name="taskName" maxlength="80" placeholder="例：整理 9 月差旅报销材料" required>
+              </label>
+              <label class="field">
+                <span class="field__label">任务类型</span>
+                <input class="input" name="taskType" maxlength="80" list="type-options" placeholder="用于台账分组，如：资料整理">
+                <datalist id="type-options"></datalist>
+              </label>
+              <label class="field field--wide">
+                <span class="field__label">目标结果 <span class="req" aria-hidden="true">*</span></span>
+                <textarea class="input" name="goal" rows="3" maxlength="2000" aria-describedby="goal-count" placeholder="做完是什么样？写结果，不只写动作。"></textarea>
+                <span class="field__hint field__count" id="goal-count" data-count-for="goal" aria-live="polite">0 / 2000 字</span>
+              </label>
+              <label class="field field--wide">
+                <span class="field__label">输入材料 <span class="req" aria-hidden="true">*</span></span>
+                <textarea class="input" name="inputs" rows="3" maxlength="2000" aria-describedby="inputs-count" placeholder="可以用哪些文件、链接、资料（一行一项）"></textarea>
+                <span class="field__hint field__count" id="inputs-count" data-count-for="inputs" aria-live="polite">0 / 2000 字</span>
+              </label>
+              <div class="field field--wide" role="group" aria-labelledby="criteria-label">
+                <span class="field__label" id="criteria-label">完成标准（逐条验收） <span class="req" aria-hidden="true">*</span></span>
+                <ol class="criteria" id="criteria-list"></ol>
+                <button type="button" class="btn btn--ghost btn--small" id="btn-add-criterion">添加一条标准</button>
+              </div>
+              <label class="field">
+                <span class="field__label">截止条件 <span class="req" aria-hidden="true">*</span></span>
+                <textarea class="input" name="deadline" rows="2" maxlength="2000" aria-describedby="deadline-count" placeholder="时间点，或「超过多久仍未完成就停下」"></textarea>
+                <span class="field__hint field__count" id="deadline-count" data-count-for="deadline" aria-live="polite">0 / 2000 字</span>
+              </label>
+              <label class="field">
+                <span class="field__label">卡住时怎么问我 <span class="req" aria-hidden="true">*</span></span>
+                <textarea class="input" name="stuckProtocol" rows="2" maxlength="2000" aria-describedby="stuckProtocol-count" placeholder="何时停、怎么问、要带什么选项"></textarea>
+                <span class="field__hint field__count" id="stuckProtocol-count" data-count-for="stuckProtocol" aria-live="polite">0 / 2000 字</span>
+              </label>
+            </div>
+          </form>
+
+          <section class="panel" aria-labelledby="board-title">
+            <div class="panel__head">
+              <h3 class="panel__title" id="board-title">权限边界</h3>
+              <p class="panel__hint">点动作下方的「自主 / 必问 / 禁止」切换，或直接拖到另一栏；聚焦动作名后可用 ← → 键移动。</p>
+            </div>
+            <div class="board-alerts" id="zone-warnings" aria-live="polite"></div>
+            <div class="board" id="board"></div>
+            <form class="custom-action" id="custom-form" autocomplete="off">
+              <label class="field custom-action__name">
+                <span class="field__label">自定义动作</span>
+                <input class="input" id="custom-label" maxlength="40" placeholder="例：改日历、提交报销申请">
+              </label>
+              <label class="check">
+                <input type="checkbox" id="custom-high">
+                <span>高风险（不可逆或需我担后果）</span>
+              </label>
+              <button type="submit" class="btn btn--secondary">添加到必问区</button>
+            </form>
+          </section>
+
+          <section class="panel" aria-labelledby="ladder-title">
+            <div class="panel__head">
+              <h3 class="panel__title" id="ladder-title">信任阶梯</h3>
+              <p class="panel__hint">只建议 → 确认后执行 → 已授权范围内自主行动。每次扩权都需要你明确同意，也可以退回上一级。</p>
+            </div>
+            <fieldset class="ladder" id="ladder">
+              <legend class="visually-hidden">当前信任级别</legend>
+            </fieldset>
+            <div class="check-panel" id="check-panel" aria-live="polite"></div>
+          </section>
+        </div>
+
+        <aside class="draft-side" aria-labelledby="preview-title">
+          <div class="side-sticky">
+            <div class="side-head">
+              <h3 class="side-head__title" id="preview-title">契约卡预览</h3>
+              <span class="side-head__note">实时生成</span>
+            </div>
+            <div id="preview"></div>
+            <div class="side-actions">
+              <button type="button" class="btn btn--primary" id="btn-copy">复制为 Markdown</button>
+              <button type="button" class="btn btn--secondary" id="btn-download">下载 .md</button>
+              <button type="button" class="btn btn--secondary" id="btn-commit">存入台账，做完回填</button>
+            </div>
+            <p class="form-msg" id="commit-msg" role="status"></p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 记分与台账 -->
+    <section class="view" id="view-score" aria-labelledby="score-title" hidden>
+      <h2 class="visually-hidden" id="score-title">记分与台账</h2>
+      <section class="panel" aria-labelledby="fill-title">
+        <div class="panel__head">
+          <h3 class="panel__title" id="fill-title">净省时记分</h3>
+          <p class="panel__hint">净省时 ＝ 表面省时 − 监督 − 返工 − 授权维护 − 学习；表面省时 ＝ 手工基线 − AI 流程中的人工执行。允许为负。</p>
+        </div>
+        <div id="fill-root"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="ledger-title">
+        <div class="panel__head panel__head--row">
+          <div>
+            <h3 class="panel__title" id="ledger-title">委托台账</h3>
+            <p class="panel__hint">只统计已回填的委托。按任务类型给出规则化建议：同类 ≥ 3 次才下结论。</p>
+          </div>
+          <button type="button" class="btn btn--secondary" id="btn-csv">导出 CSV</button>
+        </div>
+        <div id="ledger-root"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>数据只保存在本机浏览器（localStorage），不联网、不上传。规则依据见 README。</p>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

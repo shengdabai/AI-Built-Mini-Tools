@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多语言文案键核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>多语言文案键核对</h1>
+    <p>导入各语言的文案文件(多语言界面用的翻译文件),选一个源语言,查缺键、多键、占位符(文案里的 {name}、%s 这类待替换片段)和 HTML 标签,再生成待翻译表。第一步:点「载入示例」,或在下方粘贴一份文件。文件只在这台电脑的浏览器里处理。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--secondary" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--secondary" id="btn-backup">导出 JSON 备份</button>
+    <button type="button" class="btn btn--secondary" id="btn-pick-backup">导入 JSON 备份</button>
+    <input type="file" id="file-backup" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--secondary" id="btn-clear">清空全部文件与设置</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空所有已导入的文件和设置?</strong>此操作不能撤销,建议先导出备份。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="replace-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <p id="replace-title"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-replace-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-replace-no">保留现有数据</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong><span id="save-warning-reason">浏览器拒绝写入本地存储。</span>刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出备份。</p>
+    <div class="row"><button type="button" class="btn btn--danger" id="btn-save-warning-export">导出全部数据 JSON 备份</button></div>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <section id="summary" class="panel summary" aria-label="整体进度" hidden>
+    <div class="summary__stats">
+      <div class="stat"><span class="stat__value" id="sum-coverage">0%</span><span class="stat__label">整体覆盖率</span></div>
+      <div class="stat"><span class="stat__value" id="sum-untranslated">0%</span><span class="stat__label">未译率</span></div>
+      <div class="stat stat--block"><span class="stat__value" id="sum-block">0</span><span class="stat__label">阻断</span></div>
+      <div class="stat stat--warn"><span class="stat__value" id="sum-warn">0</span><span class="stat__label">警告</span></div>
+      <div class="stat"><span class="stat__value" id="sum-keys">0</span><span class="stat__label">源语言键数</span></div>
+    </div>
+    <p class="hint basis" id="sum-basis">口径:分母都是源语言的键数。覆盖率 = 目标语言里有非空译文的源键数 ÷ 源语言键数;未译率 = (缺键 + 值为空 + 与源相同且未被「允许相同」豁免的疑似未译)的源键数 ÷ 源语言键数。两者不是互补关系:译文非空但与源相同时,同一个键同时计入覆盖率和未译率。复数组里目标语言不需要的形式(例如日语没有 _one)缺失时,不算缺键;只要该复数组有任一非空形式,就算已覆盖。整体 = 所有目标语言合计。</p>
+    <div class="bar" role="progressbar" aria-label="整体覆盖率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="sum-bar"><div class="bar__fill" id="sum-bar-fill"></div></div>
+  </section>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="files" aria-current="page">文件与设置</button>
+    <button type="button" class="tab" data-view="issues">问题 <span class="count" id="issue-count">0</span></button>
+    <button type="button" class="tab" data-view="matrix">键矩阵</button>
+    <button type="button" class="tab" data-view="export">修复与导出</button>
+  </nav>
+
+  <main>
+    <!-- 文件与设置 -->
+    <section id="view-files" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有文件</h2>
+        <p>先点「载入示例」看一遍完整流程,或者按顺序操作:</p>
+        <ol class="steps">
+          <li>在下面粘贴一份语言文件(JSON、.properties 或 CSV),填语言代码,点「添加」;也可以一次选多个文件。</li>
+          <li>重复添加其他语言,再选一个源语言。</li>
+          <li>到「问题」和「键矩阵」看核对结果。</li>
+          <li>到「修复与导出」生成待翻译表,译完再合并回来。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+      </div>
+
+      <div class="panel">
+        <h2>添加语言文件</h2>
+        <p class="hint">支持嵌套 JSON、扁平 <code>a.b.c</code> JSON、<code>.properties</code>,以及首列为 <code>key</code> 的 CSV(CSV 的每个语言列会各自成为一份文件)。不支持 .po / .xliff。</p>
+        <div class="form-grid">
+          <label class="field">语言代码(粘贴 JSON / properties 时必填)<input type="text" id="paste-lang" placeholder="例如 zh、en、zh-CN" autocomplete="off"></label>
+          <div class="field"><span>或选择文件(可多选,语言从文件名推断,如 en.json)</span><input type="file" id="file-add" multiple accept=".json,.properties,.csv,.txt,text/*,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true"><div class="row"><button type="button" class="btn btn--secondary" id="btn-pick-add">选择语言文件</button></div></div>
+        </div>
+        <label class="field">粘贴文件内容<textarea id="paste-text" spellcheck="false"></textarea></label>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-add-paste">添加</button></div>
+        <p id="add-error" class="error-text" role="alert" hidden></p>
+      </div>
+
+      <div class="panel" id="files-panel" hidden>
+        <h2>已导入的文件</h2>
+        <div id="file-list" class="file-list"></div>
+      </div>
+
+      <div class="panel">
+        <h2>核对设置</h2>
+        <div class="form-grid">
+          <label class="field">允许相同的键(每行一个,可用 * 通配,如 <code>brand.*</code>)<textarea id="opt-allow-same" spellcheck="false"></textarea></label>
+          <div class="field">
+            <label class="field" for="opt-key-pattern">键名约定(正则,留空则不检查)</label>
+            <input type="text" id="opt-key-pattern" spellcheck="false" autocomplete="off">
+            <p id="opt-error" class="error-text" role="alert" hidden></p>
+            <div class="row"><button type="button" class="btn btn--secondary btn--small" id="btn-opt-reset">恢复默认</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 问题 -->
+    <section id="view-issues" class="view" hidden>
+      <div class="panel">
+        <div class="panel__head">
+          <h2>核对结果</h2>
+          <div class="row">
+            <label class="field field--inline">级别<select id="f-level"><option value="">全部</option><option value="block">阻断</option><option value="warn">警告</option></select></label>
+            <label class="field field--inline">语言<select id="f-lang"></select></label>
+            <label class="field field--inline">类型<select id="f-type"></select></label>
+          </div>
+        </div>
+        <div id="lang-stats"></div>
+      </div>
+      <div class="panel">
+        <h2 id="issues-title">问题列表</h2>
+        <div id="issues-table"></div>
+      </div>
+    </section>
+
+    <!-- 键矩阵 -->
+    <section id="view-matrix" class="view" hidden>
+      <div class="panel">
+        <div class="panel__head">
+          <h2>键矩阵</h2>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="m-only-issues"> 只看有问题的键</label>
+            <label class="field field--inline">键名包含<input type="text" id="m-filter" autocomplete="off"></label>
+          </div>
+        </div>
+        <p class="hint">红色底为阻断,黄色底为警告;「缺键」表示该语言文件里没有这个键。</p>
+        <div id="matrix-table"></div>
+      </div>
+    </section>
+
+    <!-- 修复与导出 -->
+    <section id="view-export" class="view" hidden>
+      <div class="panel">
+        <h2>核对报告</h2>
+        <p class="hint">报告按当前文件和设置实时生成,与「问题」页一致。</p>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="btn-report-md">下载报告 Markdown</button>
+          <button type="button" class="btn btn--secondary" id="btn-report-csv">下载报告 CSV</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>待翻译表</h2>
+        <p class="hint">列:键、源文本、各目标语言(空列)。只列缺键或值为空的键;译完在下面合并回来。</p>
+        <label class="check"><input type="checkbox" id="todo-same"> 同时列出疑似未翻译(与源相同)的键</label>
+        <p id="todo-info" class="hint"></p>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-todo">下载待翻译表 CSV</button></div>
+      </div>
+
+      <div class="panel">
+        <h2>合并译完的表</h2>
+        <p class="hint">粘贴或选择译完的 CSV。默认只填空键和缺键,不覆盖已有值。先预览,再确认应用。</p>
+        <label class="field">译完的 CSV<textarea id="merge-text" spellcheck="false"></textarea></label>
+        <div class="row">
+          <input type="file" id="file-merge" accept=".csv,.txt,text/*" class="visually-hidden" tabindex="-1" aria-hidden="true">
+          <button type="button" class="btn btn--secondary" id="btn-pick-merge">选择译完的 CSV 文件</button>
+          <label class="check"><input type="checkbox" id="merge-overwrite"> 覆盖已有的值</label>
+          <button type="button" class="btn btn--primary" id="btn-merge-preview">预览合并</button>
+        </div>
+        <p id="merge-error" class="error-text" role="alert" hidden></p>
+        <div id="merge-preview" class="merge-preview" hidden></div>
+      </div>
+
+      <div class="panel">
+        <h2>导出各语言 JSON</h2>
+        <p class="hint">保持原文件的嵌套结构与键顺序;含合并后的内容。</p>
+        <p id="json-error" class="error-text" role="alert" hidden></p>
+        <div id="json-buttons" class="row"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

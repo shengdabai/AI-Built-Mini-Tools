@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多表重复记录核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="title-block">
+      <h1>多表重复记录核对</h1>
+      <p class="lead">把报名表、群导出、旧 CRM 放在一起,按邮箱、手机、微信号、姓名加公司找出同一个人的多条记录。冲突字段全部保留,不替你决定谁对谁错。第一步:点右上角「载入示例」看一遍,或在左侧粘贴你的第一张表。</p>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" id="load-sample" class="primary">载入示例</button>
+      <button type="button" id="clear-data" class="ghost">清空表格、规则和确认记录</button>
+    </div>
+  </div>
+</header>
+
+<div class="banner-wrap">
+  <div id="save-alert" class="banner banner-danger" role="alert" hidden></div>
+  <p id="today-note" class="banner" hidden></p>
+  <div id="sample-confirm" class="banner banner-warn" role="alertdialog" aria-labelledby="sample-confirm-title" hidden>
+    <p id="sample-confirm-title"><strong>确认载入合成示例?</strong><span id="sample-confirm-scope"></span></p>
+    <div class="row">
+      <button type="button" id="sample-confirm-yes" class="danger">确认用示例替换</button>
+      <button type="button" id="sample-confirm-no">取消</button>
+    </div>
+  </div>
+  <div id="clear-confirm" class="banner banner-warn" hidden>
+    <p id="clear-confirm-scope">清空会删除已添加的全部表格、规则和人工确认记录,浏览器里的保存也会一并清除。导出过的文件不受影响。</p>
+    <div class="row">
+      <button type="button" id="clear-confirm-yes" class="danger">确认清空表格、规则和确认记录</button>
+      <button type="button" id="clear-confirm-no">取消</button>
+    </div>
+  </div>
+</div>
+
+<main class="app">
+  <div class="workspace">
+    <div class="side">
+      <section class="panel" aria-labelledby="h-tables">
+        <h2 id="h-tables">表格</h2>
+        <form id="add-form" class="stack" novalidate>
+          <label>表名(可不填)
+            <input id="add-name" type="text" autocomplete="off" placeholder="例如:报名表">
+          </label>
+          <label>粘贴 CSV 或 TSV(逗号或制表符分隔的文本,第一行是表头)
+            <textarea id="add-text" aria-describedby="add-error" spellcheck="false" placeholder="姓名,手机,邮箱&#10;王小明,138 0000 0001,a@example.com"></textarea>
+          </label>
+          <label>或选择本地文件
+            <input id="add-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+          </label>
+          <p id="add-error" class="field-error" role="alert" hidden></p>
+          <div class="row">
+            <button type="submit" class="primary">添加这张表</button>
+            <span class="muted">最多 5 张表,合计不超过 20000 行。</span>
+          </div>
+        </form>
+        <div id="table-list" class="table-list"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-rules">
+        <h2 id="h-rules">匹配规则</h2>
+        <div class="rules">
+          <label class="check"><input type="checkbox" id="rule-email" data-rule="email"><span>邮箱完全一致</span></label>
+          <label class="check"><input type="checkbox" id="rule-phone" data-rule="phone"><span>手机完全一致</span></label>
+          <label class="check"><input type="checkbox" id="rule-wechat" data-rule="wechat"><span>微信号一致</span></label>
+          <label class="check"><input type="checkbox" id="rule-nameCompany" data-rule="nameCompany"><span>姓名加公司一致</span></label>
+          <label class="check"><input type="checkbox" id="rule-suspect" data-rule="suspect"><span>列出疑似重复(姓名相同或相差一个字,且手机或邮箱有缺项)</span></label>
+        </div>
+        <p class="muted">比较前会先标准化:手机只留数字并去掉 +86;邮箱转小写;姓名去空格;公司去掉「有限公司」「Ltd.」等后缀。原始值不会被改。</p>
+        <p id="run-error" class="field-error" role="alert" hidden></p>
+        <div class="row">
+          <button type="button" id="run" class="primary">开始核对</button>
+          <span id="run-state" class="muted" aria-live="polite"></span>
+        </div>
+      </section>
+    </div>
+
+    <div class="main">
+      <section class="panel" aria-labelledby="h-results">
+        <h2 id="h-results" tabindex="-1">核对结果</h2>
+        <p id="sample-badge" class="banner banner-warn" hidden><strong>合成示例:</strong>下面的表格、结果和导出文件都是虚构数据,仅用于演示;添加你自己的表或点「清空表格、规则和确认记录」后这个标记消失。</p>
+        <p class="muted">记录组:一组包含被判定为同一人的记录;组号按记录顺序生成。每个记录组下面写明归组依据。</p>
+        <div id="summary" class="summary" aria-live="polite"></div>
+        <div id="suspect-box" hidden>
+          <h3>疑似重复,等你确认</h3>
+          <p class="muted">这些记录姓名相同或只差一个字,而且手机或邮箱有缺项,系统无法确定是不是同一个人。确认后才会并入。</p>
+          <div id="suspect-list" class="suspect-list"></div>
+        </div>
+        <div class="filters">
+          <label class="check"><input type="checkbox" id="show-singles"><span>同时显示没有重复的单条记录</span></label>
+          <label class="check"><input type="checkbox" id="only-conflict"><span>只看有冲突的记录组</span></label>
+        </div>
+        <div id="cluster-list" class="cluster-list"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-export">
+        <h2 id="h-export">导出</h2>
+        <p id="export-hint" class="muted"></p>
+        <div class="row">
+          <button type="button" id="export-merged" class="primary">导出合并结果 CSV</button>
+          <button type="button" id="export-report">导出冲突报告 Markdown</button>
+          <button type="button" id="export-orig">导出原始记录加组号 CSV</button>
+        </div>
+        <p class="muted">CSV 以 UTF-8(带 BOM)保存,Excel 可直接打开。以 = + - @ 开头的内容会加单引号前缀,避免被当成公式。合并结果仍需人工过目。</p>
+        <h3>冲突报告预览</h3>
+        <pre id="report-preview" class="preview" tabindex="0"></pre>
+      </section>
+    </div>
+  </div>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

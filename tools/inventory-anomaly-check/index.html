@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>库存异常检查</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>库存异常检查</h1>
+    <p>这个工具逐行核对库存表里「期初 + 入库 − 出库 = 期末」是否成立,并找出期末为负、编码重复、单位混用的商品,导出带原行号的异常清单。第一步:点右上角「载入合成示例」看效果,或把你的库存表粘贴到下面再点「解析并检查」。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空库存表、列映射和单位设置</button>
+  </div>
+</header>
+
+<main class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空?</strong><span id="clear-scope"></span>此操作不能撤销。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="replace-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <p id="replace-title"><strong id="replace-lead">这个操作会替换你现有的数据:</strong><span id="replace-scope"></span>。替换后不能撤销;如需保留,请先导出修正后库存表。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-replace-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-replace-no">取消</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,当前内容只在这个页面里,关闭页面就会丢失。请立即导出当前内存里的库存表。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出当前内存里的全部修正后库存表 CSV</button>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <section class="panel" aria-labelledby="h-import">
+    <h2 id="h-import">导入库存表</h2>
+    <p class="muted">从 Excel 或 WPS 复制整张表(含表头)粘贴到下面,或选择 CSV 文件(逗号分隔的表格文件)或 TSV 文件(制表符分隔)。第一行必须是表头。单价列里所有数字必须是同一种币种,工具不换算币种。</p>
+    <label class="field field--wide" for="src">库存表内容
+      <textarea id="src" rows="8" spellcheck="false" aria-describedby="parse-error" placeholder="商品编码&#9;商品名&#9;期初&#9;入库&#9;出库&#9;期末&#9;单位&#9;安全库存&#9;单价"></textarea>
+    </label>
+    <p id="parse-error" class="field-error" role="alert" hidden></p>
+    <div class="row">
+      <button type="button" class="btn" id="btn-parse">解析并检查</button>
+      <button type="button" class="btn btn--secondary" id="btn-file">选择 CSV 或 TSV 文件导入</button>
+      <input type="file" id="file-import" accept=".csv,.tsv,.txt,text/csv,text/plain" class="visually-hidden" tabindex="-1" aria-label="选择 CSV 或 TSV 文件">
+      <span id="sample-tag" class="tag tag--sample" hidden>合成示例数据</span>
+    </div>
+    <p id="stale-note" class="notice notice--warn" role="status" hidden>输入框的内容已改动。下面显示的是上一次检查的结果;导出已暂停,请重新点「解析并检查」。</p>
+  </section>
+
+  <section class="panel" id="mapping-panel" aria-labelledby="h-map" hidden>
+    <h2 id="h-map">列映射与单位</h2>
+    <p class="muted">已按表头自动匹配。只有「商品编码」必选。改列映射会重新读取原表,已采用的公式期末会放弃。</p>
+    <div class="map-grid" id="map-grid"></div>
+    <label class="field field--wide" for="currency">金额币种标注(可选,如 CNY;只做标注,不换算。留空则写「原表统一货币单位」)
+      <input type="text" id="currency" maxlength="12" autocomplete="off" aria-describedby="currency-error">
+    </label>
+    <p id="currency-error" class="field-error" hidden></p>
+    <label class="field field--wide" for="unit-map">单位同义表(每行一组,用 = 连接,第一个为标准写法;只做同义归一,不做换算)
+      <textarea id="unit-map" rows="5" spellcheck="false"></textarea>
+    </label>
+  </section>
+
+  <section class="panel" id="result-panel" aria-labelledby="h-result">
+    <h2 id="h-result">检查结果</h2>
+    <div id="empty-state" class="empty">
+      <p><strong>还没有数据。</strong>点右上角「载入合成示例」看一遍完整流程,或把你的库存表粘贴到上面再点「解析并检查」。</p>
+      <p class="muted">检查规则:阻断(期初+入库−出库≠期末、期末为负、编码重复或为空、数字非法)与警告(单位不一致、低于安全库存、先出后入等)。只核对表内数字,不替代实物盘点。</p>
+    </div>
+    <div id="result" hidden>
+      <p id="verdict" class="verdict" role="status"></p>
+      <div class="stat-grid" id="stat-grid"></div>
+      <details class="caliber"><summary>这些数字怎么算的</summary>
+        <p>数据行数 = 表头以下的非空行。「有异常的行」按行计,一行可以命中多条规则;阻断条数和警告条数按命中的规则条数计,所以条数可以大于行数。各规则命中数的分母同样是数据行数。库存金额 = 期末 × 单价,只统计期末非负且单价有效的行,币种取自下面的标注,留空表示原表统一货币单位。单位只归一不换算,不同单位的数量不能相加。</p>
+      </details>
+      <div class="two-col">
+        <div>
+          <h3>各规则命中</h3>
+          <ul class="rule-list" id="rule-list"></ul>
+        </div>
+        <div>
+          <h3>按单位的期末合计</h3>
+          <div class="table-wrap table-wrap--plain"><table class="plain-table" id="unit-table"><thead><tr><th scope="col">单位</th><th scope="col">行数</th><th scope="col">期末合计</th></tr></thead><tbody></tbody></table></div>
+          <p class="muted" id="value-note"></p>
+        </div>
+      </div>
+
+      <h3>逐行明细</h3>
+      <div class="toolbar">
+        <label class="field field--inline" for="filter">显示
+          <select id="filter"></select>
+        </label>
+        <button type="button" class="btn btn--secondary" id="btn-select-formula">选中全部期末不等的行</button>
+        <button type="button" class="btn" id="btn-apply" disabled>采用公式期末(只改选中行)</button>
+        <span class="muted" id="sel-count"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="grid">
+          <thead><tr>
+            <th scope="col">选</th><th scope="col">行号</th><th scope="col">商品编码</th><th scope="col">商品名</th>
+            <th scope="col">期初</th><th scope="col">入库</th><th scope="col">出库</th><th scope="col">期末</th>
+            <th scope="col">单位</th><th scope="col">问题</th>
+          </tr></thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+      </div>
+      <p class="muted" id="grid-note"></p>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-export">
+    <h2 id="h-export">导出</h2>
+    <p class="muted" id="export-note">先导入并检查,才能导出。</p>
+    <div class="row">
+      <button type="button" class="btn" id="export-issues-csv" disabled>导出异常清单 CSV</button>
+      <button type="button" class="btn" id="export-issues-md" disabled>导出异常清单 Markdown</button>
+      <button type="button" class="btn btn--secondary" id="export-fixed-csv" disabled>导出修正后库存表 CSV(全部行)</button>
+    </div>
+    <label class="field field--wide" for="md-preview">异常清单 Markdown 预览
+      <textarea id="md-preview" rows="8" readonly></textarea>
+    </label>
+  </section>
+</main>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

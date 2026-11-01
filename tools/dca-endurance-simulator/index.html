@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>定投耐力模拟器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="disclaimer" role="note">
+  <strong>合成价格序列 · 数学演示 · 不是投资建议</strong>
+  <span>不接行情、不推荐标的、不出现真实资产、不给收益预期;不含手续费与税。</span>
+</div>
+<div id="save-warning" class="alert alert-danger" role="alert" hidden><span id="save-warning-text"></span> <button type="button" id="warn-export">导出当前内存中的全部测验记录 JSON 备份</button></div>
+<p id="today-note" class="alert alert-warn" hidden></p>
+<p id="sample-banner" class="alert alert-warn" hidden></p>
+<div id="load-warning" class="alert alert-warn" role="status" hidden></div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <h1>定投耐力模拟器</h1>
+      <p class="lead">先看清自己扛不扛得住回撤,再决定要不要真投钱。数字读作关于持有行为的证据,不是组合选择的证据。第一步:点右边的「示例 A」,或在左侧填好设定后点「生成并模拟」。</p>
+    </div>
+    <div class="row" id="sample-bar">
+      <span class="muted">载入合成示例:</span>
+      <button type="button" id="sample-a">示例 A · 含 1 次 -45% 崩盘</button>
+      <button type="button" id="sample-b">示例 B · 含 2 次崩盘</button>
+      <button type="button" id="sample-c">示例 C · 自备 CSV 样例</button>
+      <button type="button" id="goto-import">导入价格 CSV / 记录 JSON</button>
+    </div>
+  </header>
+
+  <div id="confirm-zone" class="confirm" role="group" aria-live="assertive" hidden>
+    <p id="confirm-msg"></p>
+    <div class="row">
+      <button type="button" id="confirm-yes" class="primary">确认</button>
+      <button type="button" id="confirm-no">取消</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <aside class="panel settings" aria-label="设定">
+      <h2>设定</h2>
+      <form id="settings-form" class="stack" autocomplete="off">
+        <fieldset class="field-group">
+          <legend>价格序列来源</legend>
+          <label class="radio"><input type="radio" name="source" value="synthetic" data-field="source" id="f-source-synthetic"> 合成生成(种子可复现)</label>
+          <label class="radio"><input type="radio" name="source" value="csv" data-field="source" id="f-source-csv"> 粘贴自己的月度价格 CSV</label>
+        </fieldset>
+
+        <div id="synthetic-fields" class="stack">
+          <div class="grid-2">
+            <label>年数(整数,≥1)<input id="f-years" data-field="years" inputmode="numeric" maxlength="40" aria-describedby="form-errors"></label>
+            <label>随机种子(seed,决定随机涨跌的起点)<input id="f-seed" data-field="seed" inputmode="numeric" maxlength="40" aria-describedby="form-errors"></label>
+          </div>
+          <div class="grid-2">
+            <label>年化漂移(%)<input id="f-drift" data-field="drift" inputmode="decimal" maxlength="40" aria-describedby="form-errors drift-help"><span id="drift-help" class="muted">控制合成价格的长期变化趋势;不等于最终实际年收益。</span></label>
+            <label>年化波动(%)<input id="f-vol" data-field="vol" inputmode="decimal" maxlength="40" aria-describedby="form-errors vol-help"><span id="vol-help" class="muted">控制随机涨跌的幅度:越大,价格起伏越剧烈。</span></label>
+          </div>
+          <div class="row"><button type="button" id="seed-random">换一个随机种子</button></div>
+          <fieldset class="field-group">
+            <legend>崩盘(最多 3 次:某月起连续 N 个月累计下跌 X%)</legend>
+            <div id="crash-list" class="stack"></div>
+            <div class="row"><button type="button" id="crash-add">添加一次崩盘</button></div>
+          </fieldset>
+        </div>
+
+        <div id="csv-fields" class="stack" hidden>
+          <label>月度价格 CSV(1 列价格,或“月,价格”两列)
+            <textarea id="csv-text" spellcheck="false" placeholder="月,价格&#10;1,100&#10;2,98.5" aria-describedby="csv-msg"></textarea>
+          </label>
+          <div class="row">
+            <input type="file" id="csv-file" accept=".csv,text/csv,text/plain" aria-label="选择 CSV 文件">
+          </div>
+          <div class="row"><button type="button" id="csv-apply">校验并使用这份 CSV(替换当前价格)</button></div>
+          <p id="csv-msg" class="muted" role="status"></p>
+        </div>
+
+        <div class="grid-2">
+          <label>每月定投(元)<input id="f-amount" data-field="amount" inputmode="decimal" maxlength="40" aria-describedby="form-errors"></label>
+          <label>起始月(第几个月开始)<input id="f-startMonth" data-field="startMonth" inputmode="numeric" maxlength="40" aria-describedby="form-errors"></label>
+        </div>
+        <label>中断规则
+          <select id="f-ruleType" data-field="ruleType">
+            <option value="never">从不停止(只买不卖)</option>
+            <option value="stop">回撤达到阈值时停止定投</option>
+            <option value="sell">回撤达到阈值时卖出清仓</option>
+          </select>
+        </label>
+        <div class="grid-2">
+          <label>回撤阈值 D(%)<input id="f-threshold" data-field="threshold" inputmode="decimal" maxlength="40" aria-describedby="form-errors"></label>
+          <label>测验提醒阈值(%)<input id="f-quizThreshold" data-field="quizThreshold" inputmode="decimal" maxlength="40" aria-describedby="form-errors"></label>
+        </div>
+        <p class="muted">价格回撤 = 价格相对“起始月之后的价格高点”的跌幅,用来触发停投或清仓。结果里的“最大资产回撤”是另一回事:资产曲线相对资产历史高点的最大跌幅。</p>
+        <div class="row"><button type="button" id="generate" class="primary">生成并模拟</button></div>
+        <ul id="form-errors" class="errors" role="alert" hidden></ul>
+      </form>
+      <p id="save-status" class="muted" role="status">尚未保存</p>
+    </aside>
+
+    <main class="content">
+      <div class="tabs" role="tablist" aria-label="功能">
+        <button type="button" role="tab" id="tab-compare" data-tab="compare" aria-selected="true" aria-controls="panel-compare">情景对照</button>
+        <button type="button" role="tab" id="tab-quiz" data-tab="quiz" aria-selected="false" aria-controls="panel-quiz">耐力测验</button>
+        <button type="button" role="tab" id="tab-lump" data-tab="lump" aria-selected="false" aria-controls="panel-lump">全部押上</button>
+        <button type="button" role="tab" id="tab-data" data-tab="data" aria-selected="false" aria-controls="panel-data">导出与记录</button>
+      </div>
+
+      <section id="panel-compare" role="tabpanel" aria-labelledby="tab-compare">
+        <div id="empty-state" class="empty">
+          <h2>还没有价格序列</h2>
+          <p id="empty-guide">左侧填好年数、漂移、波动和种子后点“生成并模拟”;或者直接点上方的“载入合成示例”。年数、漂移、波动、崩盘设置和种子全部相同时,生成相同的价格序列。</p>
+          <p id="empty-invalid" hidden>左侧有输入不合法,修正后才会重新模拟。错误列表见左侧。</p>
+        </div>
+        <div id="compare-out" class="stack" hidden></div>
+      </section>
+
+      <section id="panel-quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+        <div id="quiz-out" class="stack"></div>
+        <div id="quiz-bar" class="quiz-bar" hidden>
+          <div id="quiz-controls" class="row">
+            <button type="button" id="quiz-next" class="primary">前进一月</button>
+            <button type="button" id="quiz-auto" aria-pressed="false">自动播放</button>
+            <button type="button" id="quiz-reset">放弃重来</button>
+          </div>
+          <div id="quiz-prompt" class="prompt" role="group" aria-live="assertive" hidden>
+            <p id="quiz-prompt-text"></p>
+            <div class="row">
+              <button type="button" id="quiz-continue">继续</button>
+              <button type="button" id="quiz-stop" class="warn">停投</button>
+              <button type="button" id="quiz-sell" class="danger">清仓</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-lump" role="tabpanel" aria-labelledby="tab-lump" hidden>
+        <div id="lump-out" class="stack"></div>
+      </section>
+
+      <section id="panel-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+        <div class="stack">
+          <div class="panel">
+            <h2>导出</h2>
+            <div class="row">
+              <button type="button" id="export-csv">下载序列与曲线 CSV</button>
+              <button type="button" id="export-md">下载 Markdown 小结</button>
+              <button type="button" id="export-json">下载测验记录 JSON(只含测验记录,不含设定)</button>
+            </div>
+            <p id="export-note" class="muted" role="status"></p>
+            <pre id="md-preview" class="preview" tabindex="0" aria-label="Markdown 小结预览"></pre>
+          </div>
+          <div class="panel">
+            <h2>导入</h2>
+            <label>粘贴价格 CSV 或测验记录 JSON(自动识别;任一处不合法则整份拒绝)
+              <textarea id="import-text" spellcheck="false" aria-describedby="import-msg"></textarea>
+            </label>
+            <div class="row">
+              <input type="file" id="import-file" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="选择导入文件">
+              <button type="button" id="import-apply">校验并导入(价格 CSV 或记录 JSON)</button>
+            </div>
+            <p id="import-msg" class="muted" role="status"></p>
+          </div>
+          <div class="panel">
+            <h2>测验记录 <span id="record-count" class="count" data-count="0">0</span></h2>
+            <div id="records-out"></div>
+            <div class="row"><button type="button" id="clear-all" class="danger">清空设定、导入的价格与全部测验记录</button></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

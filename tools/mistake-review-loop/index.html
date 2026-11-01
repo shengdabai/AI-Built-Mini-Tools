@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>错题回环 · 中文错题间隔复习</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">回</span>
+        <div>
+          <h1 class="brand__name">错题回环</h1>
+          <p class="brand__tagline">老师录入真实错句，学员每天只复习今天到期的那几条</p>
+        </div>
+      </div>
+      <div class="topbar__actions">
+        <span class="today" id="today-label"></span>
+        <button type="button" class="btn btn--quiet" id="btn-sample">载入示例</button>
+        <button type="button" class="btn btn--danger-quiet" id="btn-clear">清空数据</button>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="主要视图">
+      <div class="tabs__inner" role="tablist">
+        <a class="tab" role="tab" href="#review" data-view="review">今日复习 <span class="tab__count" id="tab-due-count">0</span></a>
+        <a class="tab" role="tab" href="#add" data-view="add">录入错题</a>
+        <a class="tab" role="tab" href="#list" data-view="list">错题本 <span class="tab__count tab__count--muted" id="tab-total-count">0</span></a>
+        <a class="tab" role="tab" href="#stats" data-view="stats">统计与导出</a>
+      </div>
+    </nav>
+  </header>
+  <p class="store-notice" id="store-notice" role="alert" hidden></p>
+
+  <main id="main" class="main">
+    <!-- 今日复习 -->
+    <section class="view" id="view-review" data-view="review" aria-labelledby="review-title">
+      <h2 class="visually-hidden" id="review-title">今日复习</h2>
+      <div id="review-root"></div>
+    </section>
+
+    <!-- 录入 -->
+    <section class="view" id="view-add" data-view="add" aria-labelledby="add-title" hidden>
+      <div class="view__head">
+        <h2 class="view__title" id="add-title">录入错题</h2>
+        <p class="view__lead">课后把学员这节课说错或写错的句子贴进来。错误类型按规则自动识别，可以手动改。</p>
+      </div>
+      <div class="add-grid">
+        <form class="panel" id="form-single" novalidate>
+          <h3 class="panel__title">单条录入</h3>
+          <label class="field">
+            <span class="field__label">错句 <span class="req" aria-hidden="true">*</span></span>
+            <input class="input input--hanzi" name="wrong" id="in-wrong" required autocomplete="off" placeholder="例：我有三个书。">
+          </label>
+          <label class="field">
+            <span class="field__label">正确句 <span class="req" aria-hidden="true">*</span></span>
+            <input class="input input--hanzi" name="correct" id="in-correct" required autocomplete="off" placeholder="例：我有三本书。">
+          </label>
+          <label class="field">
+            <span class="field__label">英文释义</span>
+            <input class="input" name="english" autocomplete="off" placeholder="I have three books.">
+          </label>
+          <label class="field">
+            <span class="field__label">备注</span>
+            <input class="input" name="note" autocomplete="off" placeholder="例：书用「本」">
+          </label>
+          <div class="field">
+            <label class="field__label" for="in-tag">错误类型</label>
+            <div class="tag-pick">
+              <select class="select" name="tag" id="in-tag"></select>
+              <span class="tag-pick__auto" id="auto-tag" aria-live="polite"></span>
+            </div>
+          </div>
+          <div class="diff-preview" id="single-preview" aria-live="polite"></div>
+          <p class="form-error" id="single-error" role="alert"></p>
+          <div class="actions">
+            <button type="submit" class="btn btn--primary">加入错题本</button>
+          </div>
+        </form>
+
+        <form class="panel" id="form-bulk" novalidate>
+          <h3 class="panel__title">批量粘贴</h3>
+          <label class="field">
+            <span class="field__label">每行一条：错句 | 正确句 | 英文（英文可省略）</span>
+            <textarea class="textarea" id="in-bulk" rows="8" spellcheck="false" placeholder="我是很累 | 我很累 | I am very tired.&#10;我昨天看一个电影 | 我昨天看了一个电影 | I watched a movie yesterday."></textarea>
+          </label>
+          <div class="bulk-preview" id="bulk-preview" aria-live="polite"></div>
+          <div class="actions">
+            <button type="submit" class="btn btn--primary" id="btn-bulk" disabled>导入</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 错题本 -->
+    <section class="view" id="view-list" data-view="list" aria-labelledby="list-title" hidden>
+      <div class="view__head view__head--row">
+        <div>
+          <h2 class="view__title" id="list-title">错题本</h2>
+          <p class="view__lead">红色是错句里要改掉的字，绿色是正确句里应有的字。标签可以直接改。</p>
+        </div>
+        <div class="filters">
+          <label class="visually-hidden" for="filter-tag">按错误类型筛选</label>
+          <select class="select" id="filter-tag"></select>
+          <label class="visually-hidden" for="filter-q">搜索</label>
+          <input class="input input--search" id="filter-q" type="search" placeholder="搜索句子或英文">
+        </div>
+      </div>
+      <div id="list-root"></div>
+    </section>
+
+    <!-- 统计与导出 -->
+    <section class="view" id="view-stats" data-view="stats" aria-labelledby="stats-title" hidden>
+      <div class="view__head">
+        <h2 class="view__title" id="stats-title">统计与导出</h2>
+        <p class="view__lead">老师看这里：哪类错误最多、学员忘得最多的是哪类。</p>
+      </div>
+      <div id="stats-root"></div>
+      <div class="panel export">
+        <h3 class="panel__title">导出与备份</h3>
+        <div class="export__grid">
+          <div class="export__item">
+            <button type="button" class="btn btn--primary" id="btn-anki">导出 Anki CSV</button>
+            <p class="hint">正面：错句 + 英文；背面：正确句 + 错误类型。在 Anki 里「文件 → 导入」选择该文件即可。</p>
+          </div>
+          <div class="export__item">
+            <button type="button" class="btn btn--secondary" id="btn-json">导出 JSON 备份</button>
+            <p class="hint">包含排期与复习记录，可在另一台电脑导入继续复习。</p>
+          </div>
+          <div class="export__item">
+            <button type="button" class="btn btn--secondary" id="btn-import">导入 JSON 备份</button>
+            <input type="file" id="in-import" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+            <p class="hint">按 id 合并：同一条错题以备份里的为准。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

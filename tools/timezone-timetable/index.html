@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨时区课表核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <h1>跨时区课表核对</h1>
+      <p class="tagline">把你自己时区的每周课表,对照成每位学员的本地时间,并提前标出夏令时(部分地区每年把时钟拨快或拨慢一小时)切换周。第一步:点「载入合成示例」,或先添加学员。</p>
+      <p id="base-date" class="tagline"></p>
+    </div>
+    <div class="toolbar">
+      <button type="button" id="btn-sample" class="btn">载入合成示例</button>
+      <button type="button" id="btn-clear" class="btn btn-danger">清空全部学员、课表与例外</button>
+    </div>
+  </div>
+</header>
+
+<div id="storage-warning" class="banner banner-error" role="alert" hidden>
+  <strong>未保存</strong>:浏览器拒绝写入本地存储(可能是空间已满或隐私模式)。刷新后改动会丢失,请先点「导出 JSON 备份」。
+</div>
+<div id="confirm-area" class="banner banner-confirm" role="alertdialog" aria-live="assertive" hidden>
+  <span id="confirm-text"></span>
+  <span class="confirm-actions">
+    <button type="button" id="confirm-yes" class="btn btn-danger">确认</button>
+    <button type="button" id="confirm-no" class="btn">取消</button>
+  </span>
+</div>
+<div id="sample-badge" class="banner banner-confirm" role="status" hidden><strong>当前含合成示例数据(不是真实学员)。</strong>清空,或导入真实备份后,这条提示消失。</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="layout">
+  <section id="empty-guide" class="panel guide">
+    <h2>从这里开始</h2>
+    <p>三步:先加学员和他们所在的时区(IANA 时区,例如 America/New_York),再录入每周固定课表(按你自己的时区),最后选一周生成对照表。第一次想看效果,点下面的按钮;示例是合成数据,载入后可用「查看 2026-10-26 所在周」看夏令时切换提醒。</p>
+    <button type="button" id="btn-sample-2" class="btn btn-primary">载入合成示例(4 位学员、6 节课)</button>
+  </section>
+
+  <div class="columns">
+    <div class="col col-setup">
+      <section class="panel">
+        <h2>教师时区</h2>
+        <label class="field">我所在的时区
+          <select id="teacher-tz"></select>
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>学员</h2>
+        <form id="form-student" class="form-row" autocomplete="off">
+          <label class="field">姓名
+            <input id="stu-name" type="text" maxlength="60" required aria-describedby="msg-student">
+          </label>
+          <label class="field">所在时区
+            <select id="stu-tz" aria-describedby="msg-student"></select>
+          </label>
+          <button type="submit" id="stu-submit" class="btn btn-primary">添加学员</button>
+          <button type="button" id="stu-cancel" class="btn" hidden>取消编辑学员</button>
+        </form>
+        <p id="msg-student" class="msg" role="status"></p>
+        <ul id="student-list" class="item-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>每周固定课表</h2>
+        <form id="form-rule" class="form-row" autocomplete="off">
+          <label class="field">学员
+            <select id="rule-student" aria-describedby="msg-rule"></select>
+          </label>
+          <label class="field">星期
+            <select id="rule-weekday">
+              <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option>
+              <option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option>
+            </select>
+          </label>
+          <label class="field">开始(教师本地)
+            <input id="rule-start" type="time" value="19:00" required aria-describedby="msg-rule">
+          </label>
+          <label class="field">时长(分钟)
+            <input id="rule-dur" type="number" min="5" max="480" step="5" value="60" required aria-describedby="msg-rule">
+          </label>
+          <button type="submit" class="btn btn-primary">添加课节</button>
+        </form>
+        <p id="msg-rule" class="msg" role="status"></p>
+        <ul id="rule-list" class="item-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>某日例外</h2>
+        <form id="form-ex" class="form-row" autocomplete="off">
+          <label class="field">哪节课
+            <select id="ex-rule" aria-describedby="msg-ex"></select>
+          </label>
+          <label class="field">日期
+            <input id="ex-date" type="date" required aria-describedby="msg-ex">
+          </label>
+          <label class="field">处理
+            <select id="ex-type">
+              <option value="cancel">取消</option>
+              <option value="move">改时间</option>
+            </select>
+          </label>
+          <label class="field ex-move">新开始
+            <input id="ex-start" type="time" value="19:00" aria-describedby="msg-ex">
+          </label>
+          <label class="field ex-move">新时长
+            <input id="ex-dur" type="number" min="5" max="480" step="5" value="60" aria-describedby="msg-ex">
+          </label>
+          <button type="submit" class="btn btn-primary">添加例外</button>
+        </form>
+        <p id="msg-ex" class="msg" role="status"></p>
+        <ul id="ex-list" class="item-list"></ul>
+      </section>
+    </div>
+
+    <div class="col col-result">
+      <section class="panel">
+        <h2>对照表</h2>
+        <div class="form-row">
+          <label class="field">选择周(任选该周内一天)
+            <input id="week-date" type="date">
+          </label>
+          <button type="button" id="btn-generate" class="btn btn-primary">生成所选周对照表</button>
+          <button type="button" id="btn-demo-week" class="btn" hidden>查看 2026-10-26 所在周(演示夏令时切换)</button>
+        </div>
+        <p id="week-range" class="hint"></p>
+        <p id="stale-note" class="stale" role="status" hidden>课表或所选周已改动,当前结果已过期。请重新生成对照表,再导出。</p>
+        <div id="result" class="result"></div>
+      </section>
+
+      <section class="panel" id="dst-panel">
+        <h2>未来 60 天夏令时切换</h2>
+        <ul id="dst-list" class="item-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>导出与备份</h2>
+        <div class="toolbar-wrap">
+          <button type="button" id="btn-md" class="btn" disabled>导出本周对照表 Markdown</button>
+          <button type="button" id="btn-ics" class="btn" disabled>导出教师时区日历 ICS</button>
+          <button type="button" id="btn-json" class="btn">导出 JSON 备份</button>
+          <button type="button" id="btn-import" class="btn">导入 JSON 备份(先预览再替换)</button>
+          <input id="file-import" type="file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+        </div>
+        <p id="export-note" class="hint">先生成对照表,Markdown 与 ICS(iCalendar,日历软件通用的事件文件)才可导出。ICS 只含教师时区的事件。</p>
+        <p id="msg-import" class="msg msg-error" role="alert"></p>
+      </section>
+    </div>
+  </div>
+</main>
+<footer class="footer">时区数据以本浏览器的 Intl 为准。数据只存在本机,不联网。示例均为合成数据。</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

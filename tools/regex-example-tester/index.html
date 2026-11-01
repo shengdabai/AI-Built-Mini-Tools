@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>正则样例验收 · 把样例写下来,逐条验证</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">开发者自用 · 本机数据 · 不联网</span>
+      <h1>正则样例验收</h1>
+      <p class="muted">写下正则和一组「输入 + 期望」,逐条运行,看哪条不符、为什么不符。</p>
+    </div>
+    <div class="row">
+      <span id="save-state" class="save-state" role="status"></span>
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="clear-data" type="button" class="danger">清空草稿和样例库</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner danger" role="alert" hidden></div>
+  <div id="load-notice" class="banner warn" role="status" hidden></div>
+  <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <strong id="confirm-text"></strong>
+    <div class="row"><button id="confirm-yes" type="button" class="danger">确认</button><button id="confirm-no" type="button">取消</button></div>
+  </div>
+
+  <div class="workspace">
+    <section class="panel editor" aria-label="正则与样例">
+      <h2>正则与样例</h2>
+      <div class="stack">
+        <label>名称(保存到样例库时用)<input id="name" type="text" autocomplete="off" placeholder="例如:手机号 11 位"></label>
+        <label>正则(不含两侧的斜杠)<input id="pattern" class="code" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="^1[3-9]\d{9}$"></label>
+        <div id="compile-status" class="compile" role="status"></div>
+        <fieldset class="flags">
+          <legend>标志</legend>
+          <label class="check"><input type="checkbox" id="flag-g" value="g"> g 全局(只验首个匹配,另计总数)</label>
+          <label class="check"><input type="checkbox" id="flag-i" value="i"> i 忽略大小写</label>
+          <label class="check"><input type="checkbox" id="flag-m" value="m"> m 多行(^ $ 逐行)</label>
+          <label class="check"><input type="checkbox" id="flag-s" value="s"> s 点号含换行</label>
+          <label class="check"><input type="checkbox" id="flag-u" value="u"> u Unicode</label>
+          <p class="hint flags-note">m 和 s 只和换行有关,但每条样例只能是单行文字(不能写换行),所以这两个标志验证不了跨行的行为。</p>
+        </fieldset>
+        <label>输入长度上限(字符,1 到 10000000)<input id="max-input" type="number" min="1" max="10000000" step="1" inputmode="numeric"></label>
+        <div id="max-error" class="error-text" role="alert"></div>
+        <label>样例表
+          <textarea id="cases" class="code" rows="12" spellcheck="false" placeholder="13812345678 | 匹配&#10;12345 | 不匹配&#10;a@b.com | 匹配 | a | b.com"></textarea>
+        </label>
+        <p class="hint">每行一条:<strong>输入 | 匹配或不匹配 | 期望捕获 1 | 期望捕获 2</strong>。每条样例只能是单行,不能含换行,跨行行为无法在这里验证。竖线本身写成 <span class="code-inline">\|</span>;<span class="code-inline">(未捕获)</span> 表示该组应为 undefined;捕获可省略。</p>
+        <div id="cases-errors" class="error-list" role="alert"></div>
+        <div class="row">
+          <button id="run" type="button" class="primary">运行验收</button>
+          <button id="stop" type="button" class="danger" hidden>停止验收(未跑完的样例标为未运行)</button>
+          <span id="run-status" class="muted" role="status"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel output" aria-label="结果与工具">
+      <nav class="tabs" role="tablist" aria-label="视图">
+        <button role="tab" data-tab="results" aria-selected="true" type="button">验收结果</button>
+        <button role="tab" data-tab="explain" aria-selected="false" type="button">正则解释</button>
+        <button role="tab" data-tab="library" aria-selected="false" type="button">样例库</button>
+        <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+      </nav>
+
+      <div id="tab-results" role="tabpanel">
+        <div id="stale-note" class="banner warn" hidden>输入已修改,下面是上一次运行的结果。重新点「运行验收」后才能导出报告。</div>
+        <div id="results-empty" class="empty">还没有结果。先「载入示例」,或填好正则和样例后点「运行验收」。</div>
+        <div id="results-body" hidden>
+          <div class="summary">
+            <div class="rate"><span id="rate-num" class="rate-num"></span><span class="muted">通过率</span></div>
+            <div id="rate-detail" class="rate-detail"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="only-fail"> 只看失败</label>
+          <div class="table-wrap">
+            <table id="results-table" class="grid">
+              <thead><tr><th>序号</th><th>输入</th><th>期望</th><th>实际</th><th>结果</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-explain" role="tabpanel" hidden>
+        <p class="muted">只覆盖常见语法;不认识的写法会标「未解析」,请以引擎的实际行为为准。</p>
+        <div id="explain-body"></div>
+      </div>
+
+      <div id="tab-library" role="tabpanel" hidden>
+        <div class="stack">
+          <div class="row">
+            <button id="lib-save" type="button" class="primary">保存到样例库</button>
+            <button id="lib-save-new" type="button">另存为新条目</button>
+          </div>
+          <p id="lib-hint" class="muted"></p>
+          <label>搜索名称或正则<input id="lib-search" type="search" autocomplete="off" placeholder="例如:邮箱"></label>
+          <div id="lib-list" class="lib-list"></div>
+        </div>
+      </div>
+
+      <div id="tab-export" role="tabpanel" hidden>
+        <div class="stack">
+          <div class="row">
+            <button id="export-csv" type="button" class="primary">下载样例表 CSV</button>
+            <button id="export-md" type="button" class="primary">下载验收报告 Markdown</button>
+            <button id="export-json" type="button">下载 JSON 备份</button>
+          </div>
+          <div id="export-note" class="muted"></div>
+          <div class="row">
+            <label class="file">导入样例表 CSV<input id="import-csv" type="file" accept=".csv,text/csv"></label>
+            <label class="file">导入 JSON 备份<input id="import-json" type="file" accept=".json,application/json"></label>
+          </div>
+          <div id="data-msg" class="msg" role="alert" hidden></div>
+          <h3>报告预览</h3>
+          <pre id="md-preview" class="preview"></pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="footer">正则样例验收 · 自用工具 · 无付款证据。示例均为合成数据。数据只存在本浏览器的 localStorage(键 regexcheck.v1),清理浏览器数据会丢失,请定期导出 JSON 备份。</p>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

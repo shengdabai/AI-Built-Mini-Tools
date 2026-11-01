@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四层对照卡</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <h1>四层对照卡</h1>
+      <p class="lead">给教英语母语者中文的教师做四层对照卡:Chinese(中文词块)/ Pinyin(拼音)/ Word-by-Word(逐词英文词义,英文叫 gloss)/ English(整句英文)。第一步:在下面输入中文句子点「生成」,或点右上角「载入合成示例」。分词与拼音自动生成,英文由你手填;数据只保存在本机浏览器。</p>
+    </div>
+    <div class="actions">
+      <button type="button" id="load-sample" class="primary">载入合成示例</button>
+      <button type="button" id="clear-data" class="danger">清空全部卡片和个人词典</button>
+    </div>
+  </header>
+
+  <section id="confirm-clear" class="panel confirm" role="alertdialog" aria-labelledby="confirm-title" hidden>
+    <h2 id="confirm-title">确认清空?</h2>
+    <p>这会删除当前所有卡片、输入内容和个人词典,且无法恢复。需要保留词典请先到「个人词典」导出 JSON。</p>
+    <div class="row">
+      <button type="button" id="confirm-clear-yes" class="danger">确认清空</button>
+      <button type="button" id="confirm-clear-no">取消</button>
+    </div>
+  </section>
+
+  <section id="confirm-replace" class="panel confirm" role="alertdialog" aria-labelledby="replace-title" hidden>
+    <h2 id="replace-title">确认替换?</h2>
+    <p id="replace-text"></p>
+    <div class="row">
+      <button type="button" id="replace-yes" class="danger">确认替换</button>
+      <button type="button" id="replace-no">取消,保留现有内容</button>
+    </div>
+  </section>
+
+  <p id="storage-warning" class="warning" role="alert" hidden><span id="storage-warning-text">未保存:浏览器拒绝写入本机存储(可能已满或被禁用),刷新后改动会丢失。</span> 请备份:卡片点「导出全部卡片 Markdown」,个人词典到「个人词典」页点「导出词典 JSON」。</p>
+
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <div class="tabs" role="tablist" aria-label="视图">
+    <button type="button" role="tab" id="tab-cards" data-tab="cards" aria-selected="true" aria-controls="view-cards">对照卡</button>
+    <button type="button" role="tab" id="tab-glossary" data-tab="glossary" aria-selected="false" aria-controls="view-glossary">个人词典 <span id="glossary-count" class="count">0</span></button>
+  </div>
+
+  <main>
+    <div id="view-cards" role="tabpanel" aria-labelledby="tab-cards">
+      <section class="panel input-panel">
+        <label for="input">中文句子(每行一句)</label>
+        <textarea id="input" rows="4" placeholder="例如:我今天想去商店买一本书。" aria-describedby="input-error draft-hint"></textarea>
+        <p id="input-error" class="field-error" role="alert" hidden></p>
+        <div class="row">
+          <button type="button" id="generate" class="primary">生成</button>
+          <span class="muted">生成会重新分词并覆盖当前所有卡片(含手改的拼音和整句英文)。</span>
+        </div>
+        <p id="draft-hint" class="field-error" hidden>输入框的内容和下面的卡片不一致:请先点「生成」更新卡片,再导出。</p>
+      </section>
+
+      <div id="cards-toolbar" class="toolbar" hidden>
+        <span id="sample-badge" class="badge" hidden>合成示例</span>
+        <button type="button" id="export-md">导出全部卡片 Markdown</button>
+        <button type="button" id="copy-text">复制全部卡片纯文本(制表符分隔)</button>
+        <span class="muted">点中文词块选中:选相邻两格可合并,选一格可拆分。</span>
+      </div>
+
+      <div id="cards" class="cards"></div>
+
+      <section id="preview" class="panel preview" hidden>
+        <h2>导出预览</h2>
+        <div id="preview-md" hidden>
+          <h3 id="preview-md-title">Markdown / 纯文本</h3>
+          <p class="muted">预览是点击导出那一刻的内容;之后再改卡片,请重新导出。</p>
+          <pre id="md-preview" tabindex="0"></pre>
+        </div>
+        <div id="preview-png" hidden>
+          <h3>PNG 预览</h3>
+          <div class="png-frame"><img id="png-preview" alt="导出的对照卡 PNG 预览"></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="view-glossary" role="tabpanel" aria-labelledby="tab-glossary" hidden>
+      <section class="panel">
+        <div class="row between">
+          <h2>个人词典</h2>
+          <div class="row">
+            <button type="button" id="gl-export">导出词典 JSON</button>
+            <button type="button" id="gl-import">导入词典 JSON(合并)</button>
+            <input type="file" id="gl-file" accept=".json,application/json" hidden>
+          </div>
+        </div>
+        <p class="muted">在对照卡里填过的「词 → 英文词义(gloss)」会自动记入这里,下次同词自动预填。<strong>卡片学习次数</strong> = 在对照卡里记入或改写该词英文词义的次数,预填不算;在本页修改英文词义只改文字,不增加次数。</p>
+        <p id="gl-msg" class="status" role="status" aria-live="polite"></p>
+        <div id="gl-empty" class="empty" hidden>词典还是空的。在对照卡的 Word-by-Word 行填一个英文词义(gloss),离开输入框时会自动记入。</div>
+        <div id="gl-confirm" class="confirm-inline" role="alertdialog" aria-labelledby="gl-confirm-text" hidden>
+          <p id="gl-confirm-text"></p>
+          <div class="row">
+            <button type="button" id="gl-confirm-yes" class="primary">确认合并</button>
+            <button type="button" id="gl-confirm-no">取消,不导入</button>
+          </div>
+        </div>
+        <div class="scroll"><table id="gl-table" class="gl-table" hidden>
+          <thead><tr><th scope="col">词</th><th scope="col">英文词义(gloss)</th><th scope="col">卡片学习次数</th><th scope="col">操作</th></tr></thead>
+          <tbody id="gl-body"></tbody>
+        </table></div>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="../_data/hsk-words.js"></script>
+<script src="../_data/pinyin-map.js"></script>
+<script src="../_shared/cn-segment.js"></script>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>时间出售三模式试算</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>时间出售三模式试算</h1>
+    <p>这个工具用三种方式算同一份工作时间能赚多少:卖一次、同一份时间卖很多次、买别人的时间。第一步:点「载入示例」看一遍,或在「现状」里填自己的数字。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空输入与全部情景</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空当前输入和所有已保存的情景?</strong>此操作不能撤销,建议先备份 JSON。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空输入与全部情景</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong>载入示例会替换当前输入和所有已保存的情景。</strong>此操作不能撤销,建议先备份 JSON。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">取消</button>
+    </div>
+  </div>
+  <div id="import-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="import-title" hidden>
+    <p id="import-title"><strong>备份文件校验通过,确认后会替换现有数据。</strong><span id="import-summary"></span></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-import-yes">确认用备份替换现有数据</button>
+      <button type="button" class="btn btn--secondary" id="btn-import-no">取消导入</button>
+    </div>
+  </div>
+  <p id="sample-badge" class="notice notice--warn" hidden><strong>当前含合成示例数据(不是真实数据)。</strong>清空,或导入真实备份后,这条提示消失。</p>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份</button>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+  <p id="input-error" class="notice notice--danger" role="alert" hidden></p>
+  <p id="import-error" class="notice notice--danger" role="alert" hidden></p>
+
+  <div id="empty-guide" class="panel panel--guide" hidden>
+    <h2>还没有数据</h2>
+    <p>先点「载入示例」看一遍三种模式怎么比,或者按顺序操作:</p>
+    <ol class="steps">
+      <li>在「现状」填目标月收入、可售工时、空置率、平台抽成、隐性时间和税费,得到模式一的最低时薪。</li>
+      <li>在模式二填一件可复制产品的制作工时、单价和预计月销量。</li>
+      <li>在模式三填外包时薪、你的时薪和可外包比例。</li>
+      <li>给情景起名,存入情景 1 至 3,在下方并列比较并导出。</li>
+    </ol>
+    <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+  </div>
+
+  <main>
+    <section class="panel" aria-labelledby="h-now">
+      <h2 id="h-now">现状</h2>
+      <p class="hint">所有数字都是你自己的假设。百分比填 0 到 100。</p>
+      <div class="fields">
+        <label class="field field--wide"><span>情景名称</span><input type="text" id="scn-name" maxlength="60" autocomplete="off"></label>
+        <label class="field"><span>目标月收入(到手,元)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="one" data-k="target"></label>
+        <label class="field"><span>每月可售工时(小时)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="one" data-k="hours"></label>
+        <label class="field"><span>空置率(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="one" data-k="vacancy"></label>
+        <label class="field"><span>平台抽成(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="one" data-k="commission"></label>
+        <label class="field"><span>隐性时间比例(%,备课、沟通等,按可收费工时的比例另加)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="one" data-k="hidden"></label>
+        <label class="field"><span>税费(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="one" data-k="tax"></label>
+      </div>
+    </section>
+
+    <div class="modes">
+      <section class="card" aria-labelledby="h-m1">
+        <h2 id="h-m1">模式一:卖一次</h2>
+        <p class="hint">一份时间只卖给一个人。反推最低时薪。</p>
+        <div id="m1-result" class="result" aria-live="polite"></div>
+        <h3>空置率每增加 10 个百分点,最低时薪要涨多少</h3>
+        <p class="hint">敏感性表:只改变一个假设(空置率),看结果怎么变。金额单位都是元/小时。</p>
+        <div class="table-wrap">
+          <table class="data-table" id="sens-table">
+            <thead><tr><th scope="col">空置率</th><th scope="col">最低时薪(元/小时)</th><th scope="col">比现状涨(元/小时)</th><th scope="col">比上一行涨(元/小时)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="h-m2">
+        <h2 id="h-m2">模式二:卖很多次</h2>
+        <p class="hint">一件可复制的产品(课程、模板、电子书)。</p>
+        <div class="fields fields--card">
+          <label class="field"><span>制作工时(小时)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="two" data-k="buildHours"></label>
+          <label class="field"><span>单价(元)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="two" data-k="price"></label>
+          <label class="field"><span>预计月销量(份)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="two" data-k="units"></label>
+          <label class="field"><span>平台费(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="two" data-k="fee"></label>
+          <label class="field"><span>退款率(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="two" data-k="refund"></label>
+          <label class="field"><span>制作时间按多少时薪估值(0 表示用模式一最低时薪)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="two" data-k="hourlyValue"></label>
+        </div>
+        <div id="m2-result" class="result" aria-live="polite"></div>
+        <div id="m2-explain" class="hint"></div>
+        <h3>等效时薪随销量变化</h3>
+        <div class="table-wrap">
+          <table class="data-table" id="curve-table">
+            <thead><tr><th scope="col">累计销量(份)</th><th scope="col">等效时薪(元/小时)</th><th scope="col">对比模式一</th><th scope="col">条形</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="h-m3">
+        <h2 id="h-m3">模式三:买别人的时间</h2>
+        <p class="hint">把一部分活外包,腾出的时间去卖更贵的事。</p>
+        <div class="fields fields--card">
+          <label class="field"><span>外包或助理时薪(元)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="three" data-k="outsourceRate"></label>
+          <label class="field"><span>你的时薪(元)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="three" data-k="yourRate"></label>
+          <label class="field"><span>可外包比例(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="three" data-k="share"></label>
+          <label class="field"><span>腾出的时间能卖出去的比例(%)</span><input type="number" min="0" max="100" step="any" inputmode="decimal" data-g="three" data-k="fill"></label>
+          <label class="field"><span>涉及的月工时(0 表示用模式一的总工时)</span><input type="number" min="0" step="any" inputmode="decimal" data-g="three" data-k="hours"></label>
+        </div>
+        <div id="m3-result" class="result" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="h-cmp">
+      <h2 id="h-cmp">情景比较</h2>
+      <p class="hint">把当前输入存成情景(最多 3 个,存到已有位置会覆盖)。条形长度按月收入,相对所有情景里的最大值。</p>
+      <div class="row" id="slot-buttons" role="group" aria-label="保存情景"></div>
+      <p id="dirty-hint" class="hint hint--warn" hidden>编辑区的输入和已存情景不一致,情景表导出已暂停,请先保存或载入已存情景。</p>
+      <div id="cmp-empty" class="hint">还没有保存的情景。</div>
+      <div class="table-wrap" id="cmp-wrap" hidden>
+        <table class="data-table" id="cmp-table">
+          <thead><tr><th scope="col">情景</th><th scope="col">模式</th><th scope="col">月收入(元)</th><th scope="col">工时(小时)</th><th scope="col">等效时薪(元/小时)</th><th scope="col">排名</th><th scope="col">月收入条形</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="scn-list" class="scn-list"></div>
+      <p class="hint">口径:模式一的工时含隐性时间;模式二的工时是一次性制作工时,等效时薪是首月净收入除以制作工时;模式三的工时是自己亲手做的工时,月收入是目标加净增。</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-exp">
+      <h2 id="h-exp">导出</h2>
+      <div class="row">
+        <button type="button" class="btn btn--primary" id="btn-export-md">下载情景表 Markdown</button>
+        <button type="button" class="btn btn--secondary" id="btn-export-csv">下载情景表 CSV</button>
+      </div>
+      <p id="export-hint" class="hint"></p>
+      <pre class="preview" id="md-preview" tabindex="0" aria-label="Markdown 预览"></pre>
+    </section>
+  </main>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

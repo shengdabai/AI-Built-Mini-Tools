@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>链接参数预检</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>链接参数预检</h1>
+    <p>发布前检查链接中的推广来源参数(UTM),找出漏填、重复和格式问题。本工具不访问链接,只在本机浏览器里计算。第一步:点「载入示例」,或把链接粘贴到下方。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空链接、规则和构建参数</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空链接、设置和构建参数?</strong>此操作不能撤销。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong>载入示例会替换当前的链接、规则设置和构建参数。</strong>现有内容会被覆盖且不能撤销,建议先导出。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">替换为示例</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">取消</button>
+    </div>
+  </div>
+  <div id="input-error" class="notice notice--danger" role="alert" hidden></div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的内容只在当前页面里,关闭页面就会丢失。请先导出检查结果或规范化链接再离开。</p>
+  </div>
+  <div id="clear-warning" class="notice notice--danger" role="alert" hidden></div>
+  <div id="load-warning" class="notice notice--warn" role="status" hidden></div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="check" aria-current="page">检查链接</button>
+    <button type="button" class="tab" data-view="build">批量构建</button>
+  </nav>
+
+  <div class="panel panel--rules">
+    <details class="settings" id="settings">
+      <summary>检查规则设置(检查和构建共用)</summary>
+      <div class="form-grid">
+        <label class="field">UTM 必填项(逗号分隔)
+          <input type="text" id="set-required" aria-describedby="settings-error">
+        </label>
+        <label class="field">utm_campaign 命名规则(正则表达式:用符号描述文本格式的写法)
+          <input type="text" id="set-pattern" aria-describedby="settings-error">
+        </label>
+        <label class="field field--wide">允许的域名(逗号或换行分隔,留空则不检查;子域名自动允许)
+          <input type="text" id="set-domains" aria-describedby="settings-error" placeholder="例如 example.com, shop.example.com">
+        </label>
+        <label class="check"><input type="checkbox" id="set-lower"> UTM 值约定小写(含大写时警告)</label>
+        <label class="check"><input type="checkbox" id="set-order"> 检查同一域名下参数顺序是否一致</label>
+      </div>
+      <p id="settings-error" class="field-error" role="alert" hidden></p>
+    </details>
+  <p class="hint">这组规则同时用于「检查链接」和「批量构建」。</p>
+  </div>
+
+  <main>
+    <section id="view-check" class="view">
+      <div class="panel">
+        <h2>粘贴链接 <span class="sample-tag" id="sample-tag-check" hidden>合成示例</span></h2>
+        <p class="hint">每行一条链接;也可以粘贴带「url」或「链接」列表头的 CSV。无协议的链接按 https:// 补全并给出警告。</p>
+        <label class="field">链接列表
+          <textarea id="links-text" rows="9" class="link-text" spellcheck="false" placeholder="https://example.com/page?utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=spring_sale"></textarea>
+        </label>
+        <div class="row">
+          <button type="button" class="btn btn--primary" id="btn-check">检查</button>
+          <button type="button" class="btn btn--secondary" id="btn-adopt-all" disabled>采用全部建议链接</button>
+        </div>
+      </div>
+
+      <div id="empty-guide" class="panel panel--guide">
+        <h2>还没有检查结果</h2>
+        <p>先点「载入示例」看一遍完整流程,或者按顺序操作:</p>
+        <ol class="steps">
+          <li>把要发布的链接粘贴到上面的框里,每行一条。</li>
+          <li>需要时展开「检查规则设置」,改必填项、命名规则、允许域名。</li>
+          <li>点「检查」,逐条看阻断和警告,再采用建议链接。</li>
+          <li>在下方导出检查结果或规范化后的链接列表。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入示例</button></div>
+      </div>
+
+      <div id="stale-note" class="notice notice--warn" role="status" hidden>链接或规则已修改,当前结果已过期。请重新点「检查」,导出按钮才会可用。</div>
+
+      <div id="result-area" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <h2>检查结果 <span class="sample-tag" id="sample-tag-result" hidden>合成示例</span></h2>
+            <label class="field field--inline">显示
+              <select id="filter">
+                <option value="all">全部链接</option>
+                <option value="issues">仅有问题的</option>
+                <option value="block">仅阻断的</option>
+              </select>
+            </label>
+          </div>
+          <div id="summary" class="summary" aria-live="polite"></div>
+          <div id="results" class="results"></div>
+        </div>
+
+        <div class="panel">
+          <h2>导出</h2>
+          <div class="row">
+            <button type="button" class="btn btn--primary" id="export-csv">导出检查结果 CSV</button>
+            <button type="button" class="btn btn--primary" id="export-md">导出检查结果 Markdown</button>
+            <button type="button" class="btn btn--primary" id="export-norm-csv">导出规范化链接 CSV</button>
+            <button type="button" class="btn btn--primary" id="export-norm-txt">导出规范化链接 TXT</button>
+          </div>
+          <label class="field">Markdown 预览
+            <textarea id="md-preview" rows="8" readonly class="link-text"></textarea>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-build" class="view" hidden>
+      <div class="panel">
+        <h2>批量构建 <span class="sample-tag" id="sample-tag-build" hidden>合成示例</span></h2>
+        <p class="hint">基础链接 + 参数表,生成全部组合。参数表是 CSV,列为 source, medium, campaign, content, term;一个格子里用 | 写多个取值,会展开成全部组合。生成的链接已按规范化规则编码、排序。</p>
+        <label class="field">基础链接
+          <input type="text" id="build-base" class="link-text" spellcheck="false" placeholder="https://example.com/page">
+        </label>
+        <label class="field">参数表(CSV)
+          <textarea id="build-table" rows="6" class="link-text" spellcheck="false" placeholder="source,medium,campaign,content,term&#10;newsletter,email|social,spring_sale,,"></textarea>
+        </label>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-build">生成链接</button></div>
+      </div>
+
+      <div id="stale-build" class="notice notice--warn" role="status" hidden>基础链接或参数表已修改,当前生成结果已过期。请重新点「生成链接」。</div>
+      <div id="build-area" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <h2>生成结果 <span class="sample-tag" id="sample-tag-build-result" hidden>合成示例</span></h2>
+            <button type="button" class="btn btn--primary" id="export-build-csv">导出构建结果 CSV</button>
+          </div>
+          <p id="build-summary" class="hint" aria-live="polite"></p>
+          <ul id="build-errors" class="issue-list"></ul>
+          <div id="build-results" class="results"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

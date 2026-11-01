@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>译稿机械检查</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>译稿机械检查</h1>
+    <p>交稿前过一遍双语稿:漏译、占位符(程序里 {0}、%s 这类要原样保留的记号)、数字、术语、长度、标点。只查机械一致性,不判断译文准不准。第一步:点右上角「载入合成示例」看效果,或把你的双语表粘贴到下面,再点「运行检查」。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="load-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-backup">导出输入 JSON 备份(双语稿、术语表、选项)</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-backup" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空双语稿、术语表、选项和检查结果</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空?</strong><span id="clear-scope"></span>此操作不能撤销,建议先导出 JSON 备份。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong id="sample-lead">这个操作会替换你现有的内容:</strong><span id="sample-scope"></span>。确认前现有内容不变;替换后不能撤销。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">保留现有内容</button>
+    </div>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的内容只在当前页面里,关闭页面就会丢失。请先导出备份,或把双语稿另存到别处。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-warn-backup">导出当前内存里的全部输入(JSON 备份)</button>
+      <button type="button" class="btn btn--danger" id="btn-warn-export">导出带问题列的双语表 CSV(需先运行检查)</button>
+    </div>
+  </div>
+  <div id="sample-badge" class="notice notice--warn" hidden><strong>当前双语表是合成示例,不是真实稿件。</strong>导出的问题清单、双语表 CSV 和 Markdown 里也会标注。改动、清空或导入你自己的内容后这条提示消失。</div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden></div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <section id="empty-guide" class="panel panel--guide" aria-labelledby="guide-title" hidden>
+    <h2 id="guide-title">还没有内容</h2>
+    <p>先点「载入合成示例」看一遍完整流程(20 段中英双语教材),或者按顺序操作:</p>
+    <ol class="steps">
+      <li>在下面粘贴双语表(CSV/TSV,三列:段落号、原文、译文),或切到「两个文本框按行对齐」。</li>
+      <li>需要的话填术语表,每行 <code>原文术语 | 允许译法1, 允许译法2</code>。</li>
+      <li>点「运行检查」,按段落号逐条看问题,最后导出。</li>
+    </ol>
+    <div class="row"><button type="button" class="btn btn--primary" id="load-sample-2">载入合成示例</button><button type="button" class="btn btn--secondary" id="btn-import-2">导入 JSON 备份(恢复以前导出的输入)</button></div>
+    <details class="terms"><summary>名词解释</summary>
+      <ul class="plain-list">
+        <li>CSV / TSV:逗号分隔 / 制表符分隔的表格文件,可从 Excel 或 WPS 另存或直接复制粘贴。</li>
+        <li>占位符:程序会替换的记号,如 {0}、{name}、%s、%d、HTML 标签 &lt;b&gt;…&lt;/b&gt;;译文里必须原样保留。</li>
+        <li>术语表:你规定某个原文词必须怎么译;译文里没有出现任何允许的译法就报警告。</li>
+        <li>阻断 / 警告:阻断是几乎一定要改的问题(漏译、占位符或数字对不上),警告是需要人判断的提示。</li>
+        <li>长度比:译文字符数 ÷ 原文字符数。</li>
+      </ul>
+    </details>
+  </section>
+
+  <main>
+    <div class="inputs">
+      <section class="panel" aria-labelledby="in-title">
+        <h2 id="in-title">双语稿</h2>
+        <fieldset class="modes">
+          <legend class="visually-hidden">导入方式</legend>
+          <label class="choice"><input type="radio" name="mode" value="table" id="mode-table" checked> 双语表(CSV/TSV)</label>
+          <label class="choice"><input type="radio" name="mode" value="two" id="mode-two"> 两个文本框按行对齐</label>
+        </fieldset>
+        <div id="pane-table" class="stack">
+          <div class="row">
+            <button type="button" class="btn btn--secondary" id="btn-file">选择 CSV 或 TSV 文件导入双语表</button>
+            <input type="file" id="file-import" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" class="visually-hidden" tabindex="-1" aria-label="选择 CSV 或 TSV 文件">
+            <span class="hint">或直接粘贴。列顺序:段落号、原文、译文;第一行可带表头;整份表格不合法时会被拒绝并说明原因。</span>
+          </div>
+          <span class="field-error" id="err-file" hidden></span>
+          <label class="field"><span class="field__label">双语表内容</span>
+            <textarea id="table-text" class="textarea textarea--tall" spellcheck="false" placeholder="段落号&#9;原文&#9;译文"></textarea><span class="field-error" id="err-table" hidden></span></label>
+        </div>
+        <div id="pane-two" class="twocol" hidden>
+          <label class="field"><span class="field__label">原文(每段一行)</span>
+            <textarea id="src-text" class="textarea textarea--tall" spellcheck="false"></textarea><span class="field-error" id="err-src" hidden></span></label>
+          <label class="field"><span class="field__label">译文(每段一行)</span>
+            <textarea id="tgt-text" class="textarea textarea--tall" spellcheck="false"></textarea></label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="gl-title">
+        <h2 id="gl-title">术语表与选项</h2>
+        <label class="field"><span class="field__label">术语表(每行 <code>原文术语 | 允许译法1, 允许译法2</code>,全角分隔也认)</span>
+          <textarea id="glossary-text" class="textarea" spellcheck="false" placeholder="variable | 变量, 变数"></textarea><span class="field-error" id="err-glossary" hidden></span></label>
+        <label class="choice"><input type="checkbox" id="opt-case"> 术语匹配区分大小写</label>
+        <div class="optrow">
+          <label class="field"><span class="field__label">长度比上限(译文字符数 ÷ 原文字符数;去掉首尾空白,内部空格和标点计入)</span>
+            <input type="number" id="opt-hi" class="input" step="0.1" min="0.1"><span class="field-error" id="err-ratioHigh" hidden></span></label>
+          <label class="field"><span class="field__label">长度比下限</span>
+            <input type="number" id="opt-lo" class="input" step="0.05" min="0.01"><span class="field-error" id="err-ratioLow" hidden></span></label>
+        </div>
+        <p class="hint">中译英与英译中的正常长度比差别很大,按你的语言对调整上下限。</p>
+      </section>
+    </div>
+
+    <div class="runbar">
+      <button type="button" class="btn btn--primary" id="run-check">运行检查</button>
+      <p id="input-error" class="notice notice--danger" role="alert" hidden></p>
+    </div>
+
+    <section id="results" class="panel" aria-labelledby="res-title" hidden>
+      <h2 id="res-title">检查结果</h2>
+      <p id="verdict" class="verdict" role="status"></p>
+      <p id="stale-note" class="notice notice--warn" role="status" hidden>输入或选项已改动,下面是上一次的结果。请重新点「运行检查」,之后才能导出。</p>
+      <p id="align-note" class="notice notice--warn" hidden></p>
+      <div id="stats" class="stats" aria-label="统计"></div>
+      <details class="caliber"><summary>这些数字怎么算的</summary>
+        <p>段数 = 双语表的行数(或两个文本框按行对齐后的行数);原文和译文都是空的段不检查,但仍计入段数。漏译数、占位符问题数、数字不一致数按命中的问题条数计;术语不一致数按「术语命中」计,一段里有两个术语不一致就算两条。阻断合计、警告合计也按问题条数计,一段可以有多条,所以合计可以大于段数。长度比 = 译文字符数 ÷ 原文字符数(去掉首尾空白,内部空格和标点计入),默认超过 3 或低于 0.3 报警告。「没有发现问题」只在所有检查完整运行、没有输入错误时显示。</p>
+      </details>
+      <div class="toolbar">
+        <label class="field field--inline"><span class="field__label">显示</span>
+          <select id="filter" class="input">
+            <option value="issues">只看有问题的段落</option>
+            <option value="block">只看有阻断问题的段落</option>
+            <option value="all">全部段落</option>
+          </select></label>
+        <div class="row" role="group" aria-label="导出">
+          <button type="button" class="btn btn--secondary" id="export-issues-csv">导出问题清单 CSV</button>
+          <button type="button" class="btn btn--secondary" id="export-issues-md">导出问题清单 Markdown</button>
+          <button type="button" class="btn btn--secondary" id="export-annotated">导出带问题列的双语表 CSV</button>
+        </div>
+      </div>
+      <p id="export-hint" class="hint"></p>
+      <div id="rows" class="segs"></div>
+    </section>
+  </main>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

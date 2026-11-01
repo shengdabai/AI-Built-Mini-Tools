@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "synthetic": false,
+  "tasks": [{
+    "id": "imported_1",
+    "name": "导入验收任务",
+    "type": "数据迁移",
+    "date": "2026-10-29",
+    "model": "Model Import",
+    "acceptance": "导入预览确认后只保留这一条任务。",
+    "outcome": "passed",
+    "workMinutes": 12,
+    "reworkMinutes": 3,
+    "api": null,
+    "subscriptionUsage": null,
+    "wage": null,
+    "notes": "测试数据"
+  }]
+}

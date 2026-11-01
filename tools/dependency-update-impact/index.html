@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>依赖更新影响说明</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div>
+      <h1 class="title">依赖更新影响说明</h1>
+      <p class="subtitle">升级依赖前,把新旧 package.json、git diff 或 npm outdated 的输出贴进来,得到按版本号级别分类的影响说明和测试建议,可贴进 PR 描述。第一步:点下面的「载入合成示例」看效果,或把你自己的内容粘贴到输入框再点「分析依赖变化」。全部在本机完成,不联网。</p>
+    </div>
+    <p id="save-status" class="save-status" role="status" aria-live="polite"></p>
+  </div>
+</header>
+
+<div id="save-warning" class="banner banner-danger" role="alert" hidden>
+  <div class="wrap">
+    <strong>未保存:</strong>浏览器拒绝写入本地存储(可能已满或被禁用)。当前输入只在这个页面里,刷新就会丢失。请先点下面的按钮,把输入框里的原始内容下载成 TXT 文件留存;分析结果可在输入完整后再导出。
+    <div class="actions"><button id="download-input-warn" class="btn btn-danger" type="button">下载输入框里的全部原始内容 TXT</button></div>
+  </div>
+</div>
+
+<main class="wrap main">
+  <section class="panel" aria-labelledby="input-h">
+    <h2 id="input-h" class="panel-title">粘贴输入</h2>
+    <p class="hint">支持三种格式,自动识别:旧、新两份 package.json(依次粘贴);<code>git diff package.json</code> 的输出(git 的改动对比);<code>npm outdated</code> 的表格(npm 列出可更新依赖的命令)。</p>
+    <details class="terms"><summary>名词解释</summary>
+      <ul class="plain-list">
+        <li>语义化版本(semver):版本号写成 主.次.补丁。主版本(major)变化可能有破坏性变更,次版本(minor)是新增功能,补丁(patch)是修复。</li>
+        <li>dependencies / devDependencies:运行时依赖 / 只在开发和构建时用的依赖。</li>
+        <li>CHANGELOG:包作者写的版本变更记录,本工具不联网读取。</li>
+        <li>npm outdated 的三列:Current 是已安装版本;Wanted 是在 package.json 现有范围内能装到的最高版本;Latest 是 registry(包仓库)上的最新发布版本,可能跨 major。</li>
+      </ul>
+    </details>
+    <p id="sample-badge" class="banner banner-warn inline-note" role="status" hidden><strong>当前输入是合成示例,</strong>包名与版本均为虚构。导出的 Markdown 和 CSV 也会标注。修改、清空或载入你自己的内容后这条提示消失。</p>
+    <label class="field-label" for="input">输入内容</label>
+    <textarea id="input" class="code-input" rows="12" spellcheck="false" placeholder="在这里粘贴。例如先粘贴旧的 package.json,空一行,再粘贴新的 package.json。"></textarea>
+    <section id="error-box" class="banner banner-danger error-box" role="alert" hidden>
+      <strong>无法分析:</strong><span id="error-text"></span>
+    </section>
+    <p class="detected" role="status" aria-live="polite">识别结果:<strong id="detected">还没有内容</strong></p>
+    <fieldset class="target-set">
+      <legend>npm outdated 比较目标列(只对 npm outdated 输入生效)</legend>
+      <label class="check"><input type="radio" name="target" id="target-latest" value="latest" checked> Latest:registry 上的最新发布版本(可能跨 major),默认</label>
+      <label class="check"><input type="radio" name="target" id="target-wanted" value="wanted"> Wanted:在 package.json 现有范围内能装到的最高版本</label>
+    </fieldset>
+    <div class="actions">
+      <button id="analyze" class="btn btn-primary" type="button">分析依赖变化</button>
+      <button id="load-sample" class="btn" type="button">载入合成示例:两份 package.json</button>
+      <button id="load-sample-diff" class="btn" type="button">载入合成示例:git diff</button>
+      <button id="load-sample-outdated" class="btn" type="button">载入合成示例:npm outdated</button>
+      <button id="load-file-btn" class="btn" type="button">从 TXT 文件载入输入</button>
+      <input type="file" id="load-file" accept=".txt,.json,.diff,.patch,text/plain" class="visually-hidden" tabindex="-1" aria-label="选择要载入的文本文件">
+      <button id="download-input" class="btn" type="button">下载输入框内容 TXT</button>
+      <button id="clear-btn" class="btn btn-quiet" type="button">清空输入框和分析结果</button>
+    </div>
+    <p id="file-error" class="field-error" role="alert" hidden></p>
+    <div id="replace-confirm" class="confirm" role="alertdialog" aria-labelledby="replace-q" hidden>
+      <p id="replace-q">输入框里已有内容,载入会覆盖它。确定替换吗?</p>
+      <div class="actions">
+        <button id="replace-yes" class="btn btn-danger" type="button">确认替换</button>
+        <button id="replace-no" class="btn" type="button">取消</button>
+      </div>
+    </div>
+    <div id="clear-confirm" class="confirm" role="alertdialog" aria-labelledby="clear-q" hidden>
+      <p id="clear-q">确定清空输入和分析结果吗?清空后无法恢复。</p>
+      <div class="actions">
+        <button id="clear-yes" class="btn btn-danger" type="button">确认清空</button>
+        <button id="clear-no" class="btn" type="button">取消</button>
+      </div>
+    </div>
+    <p class="hint">示例为合成数据,包名与版本均为虚构组合,不对应任何真实项目。</p>
+  </section>
+
+  <section id="empty-state" class="panel empty">
+    <h2 class="panel-title">还没有分析结果</h2>
+    <p>点「载入示例」可以立刻看到效果;或者把你自己的 package.json 粘贴到上面,再点「分析依赖变化」。</p>
+    <ul class="plain-list">
+      <li>每个升级按 major / minor / patch / 预发布 / 非 semver 分类。</li>
+      <li>范围符号(^、~、&gt;=)的变化单独列出并解释。</li>
+      <li>建议是固定模板,不读 CHANGELOG,不编造具体包的变更。</li>
+    </ul>
+  </section>
+
+  <div id="results" hidden>
+    <section class="panel" aria-labelledby="sum-h">
+      <h2 id="sum-h" class="panel-title">变化概览</h2>
+      <p id="basis-note" class="hint"></p>
+      <p id="stale-note" class="banner banner-warn inline-note" role="status" hidden>输入已经改动,下面的结果是上一次分析的。请重新点「分析依赖变化」,导出已暂时停用。</p>
+      <ul id="summary" class="summary"></ul>
+      <p id="attention-note" class="hint"></p>
+      <details class="caliber"><summary>这些数字怎么算的</summary>
+        <p>每个依赖按「旧版本 → 新版本」比较一次,计一项变化;同一个包只计一项。分类按版本号最高变化的位置:主版本变化为 major,次版本变化为 minor,补丁变化为 patch;0.x 版本和预发布版本、git 地址、workspace: 等无法比较大小的写法单独归类。「需要重点关注」是 major、降级、预发布、非 semver、重复声明、移动区块这几类的合计。没有检测到变化时,表示两边的依赖版本写法完全相同。</p>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="table-h">
+      <h2 id="table-h" class="panel-title">变更明细与影响说明</h2>
+      <div class="table-wrap">
+        <table class="changes" id="changes-table">
+          <thead>
+            <tr><th scope="col">包名</th><th scope="col">区块</th><th scope="col">分类</th><th scope="col">旧版本</th><th scope="col">新版本</th><th scope="col">影响说明</th></tr>
+          </thead>
+          <tbody id="changes-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="check-h">
+      <h2 id="check-h" class="panel-title">测试建议清单</h2>
+      <p class="hint">通用模板,按 major 升级的包列出需要检查的方面;不代表这些包的真实变更。</p>
+      <div id="checklist"></div>
+    </section>
+
+    <section class="panel" id="export-panel" aria-labelledby="export-h">
+      <h2 id="export-h" class="panel-title">导出</h2>
+      <div class="actions">
+        <button id="export-md" class="btn btn-primary" type="button">下载影响说明 Markdown</button>
+        <button id="copy-md" class="btn" type="button">复制影响说明 Markdown</button>
+        <button id="export-csv" class="btn" type="button">下载变更表 CSV</button>
+      </div>
+      <p id="export-status" class="hint" role="status" aria-live="polite"></p>
+      <label class="field-label" for="md-preview">Markdown 预览(可直接贴进 PR 描述)</label>
+      <textarea id="md-preview" class="code-input preview" rows="14" readonly></textarea>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap footer">
+  <p>不联网查询 registry 或 CHANGELOG;只支持 npm 的 package.json。数据只保存在本浏览器的 localStorage 里。</p>
+</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

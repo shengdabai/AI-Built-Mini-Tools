@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>北极星提示词工厂 · AI 使用质量自检器</title>
+  <meta name="description" content="为严肃 LLM 用户打造的提示词工厂与使用质量自检器：用 AI 督促 AI，对抗迎合，追踪你的评价判断力是否在变强。" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E" />
+  <!-- 字体表不阻塞首屏：国内网络访问 Google Fonts 常超时，原来的写法会一直白屏到请求失败；现在先用系统字体显示，字体到了再换上 -->
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="../shared/archive-recovery.css" />
+</head>
+<body>
+  <!-- 星空背景 -->
+  <div class="starfield" id="starfield" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="polaris" aria-hidden="true">✦</span>
+      <div class="brand-text">
+        <h1>北极星提示词工厂</h1>
+        <p class="tagline">用 AI 督促 AI · 对抗迎合 · 让评价判断力可被追踪</p>
+      </div>
+    </div>
+    <nav class="nav" id="nav" aria-label="主导航">
+      <button class="nav-btn active" type="button" data-view="forge" aria-current="page">工厂</button>
+      <button class="nav-btn" type="button" data-view="library">提示词库</button>
+      <button class="nav-btn" type="button" data-view="selfcheck">自检打卡</button>
+      <button class="nav-btn" type="button" data-view="trend">趋势</button>
+      <button class="nav-btn" type="button" data-view="principles">原理</button>
+    </nav>
+  </header>
+
+  <main class="stage">
+    <div id="archiveRecovery"></div>
+
+    <!-- ============ 视图 1：工厂主页 ============ -->
+    <section class="view active" id="view-forge">
+      <div class="forge-grid">
+        <!-- 表单 -->
+        <div class="panel form-panel">
+          <h2 class="panel-title">构造提示词</h2>
+
+          <div class="field">
+            <label class="field-label">专业领域底板</label>
+            <div class="seg" id="domainSeg" role="group" aria-label="专业领域底板">
+              <button class="seg-btn active" type="button" data-domain="writing" aria-pressed="true">写作</button>
+              <button class="seg-btn" type="button" data-domain="coding" aria-pressed="false">编码</button>
+              <button class="seg-btn" type="button" data-domain="investing" aria-pressed="false">投资</button>
+              <button class="seg-btn" type="button" data-domain="research" aria-pressed="false">研究</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="domainInput">具体范围（写给 AI 看的领域上下文）</label>
+            <input type="text" id="domainInput" class="text-input"
+              placeholder="例如：中文非虚构写作 / 高并发后端 / 美股长期持有" />
+          </div>
+
+          <div class="field">
+            <label class="field-label">三原则（每条都在抵抗一种迎合）</label>
+            <div class="principles" id="principleList">
+              <label class="principle">
+                <input type="checkbox" data-principle="independence" checked />
+                <span class="principle-body">
+                  <span class="principle-name">独立性</span>
+                  <span class="principle-anti">抵抗：AI 替你思考、直接代笔，让你越用越懒</span>
+                </span>
+              </label>
+              <label class="principle">
+                <input type="checkbox" data-principle="calibration" checked />
+                <span class="principle-body">
+                  <span class="principle-name">校准</span>
+                  <span class="principle-anti">抵抗：用流畅措辞掩盖证据薄弱，让你高估确定性</span>
+                </span>
+              </label>
+              <label class="principle">
+                <input type="checkbox" data-principle="first_principle" checked />
+                <span class="principle-body">
+                  <span class="principle-name">第一性原理</span>
+                  <span class="principle-anti">抵抗：用「大家都这么说」的共识替代真正的推理</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="weaknessInput">你最容易被 AI 顺着说的弱点</label>
+            <textarea id="weaknessInput" class="text-input area" rows="2"
+              placeholder="例如：我一被夸方案聪明就会停止找漏洞 / 我倾向于接受第一个听起来合理的解释"></textarea>
+          </div>
+
+          <div class="field">
+            <label class="field-label">对抗强度</label>
+            <div class="seg" id="intensitySeg" role="group" aria-label="对抗强度">
+              <button class="seg-btn" type="button" data-intensity="gentle" aria-pressed="false">温和提醒</button>
+              <button class="seg-btn active" type="button" data-intensity="rival" aria-pressed="true">对手陪练</button>
+              <button class="seg-btn" type="button" data-intensity="ruthless" aria-pressed="false">冷酷拷问</button>
+            </div>
+          </div>
+
+          <div class="field mode-card" id="modeCard">
+            <div class="mode-head">
+              <span class="mode-dot"></span>
+              <span class="mode-title">动手前先选模式：探询 vs 委派</span>
+            </div>
+            <div class="mode-switch" role="group" aria-label="协作模式：探询 vs 委派">
+              <button class="mode-opt active" type="button" data-mode="inquiry" aria-pressed="true">探询模式</button>
+              <button class="mode-opt" type="button" data-mode="delegate" aria-pressed="false">委派模式</button>
+            </div>
+            <p class="mode-hint" id="modeHint"></p>
+          </div>
+        </div>
+
+        <!-- 预览 -->
+        <div class="panel preview-panel">
+          <div class="console" id="console">
+            <div class="console-bar">
+              <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+              <span class="console-name" id="consoleName">polaris.prompt</span>
+            </div>
+            <pre class="console-body" id="promptOut"></pre>
+          </div>
+
+          <div class="meta-row">
+            <div class="token-box">
+              <span class="token-num" id="tokenNum">0</span>
+              <span class="token-unit">token (估算)</span>
+              <span class="token-chars" id="charCount"></span>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="saveBtn">存为 fork</button>
+              <button class="btn primary" type="button" id="copyBtn">复制到剪贴板</button>
+            </div>
+          </div>
+          <p class="hint" id="copyHint"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 视图 2：提示词库 ============ -->
+    <section class="view" id="view-library">
+      <div class="panel">
+        <div class="panel-head-row">
+          <h2 class="panel-title">我的提示词库</h2>
+          <span class="counter" id="libCount"></span>
+        </div>
+        <p class="sub">为不同场景保存多版提示词（fork），命名、切换载入、编辑或删除。</p>
+        <div class="fork-list" id="forkList"></div>
+        <div class="empty" id="libEmpty">
+          还没有保存的 fork。去「工厂」构造一个提示词，点「存为 fork」。
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 视图 3：自检打卡 ============ -->
+    <section class="view" id="view-selfcheck">
+      <div class="panel narrow">
+        <h2 class="panel-title">使用质量自检</h2>
+        <p class="sub">每次重要的 AI 协作之后，花一分钟回答这组校准问题。<br/>
+          它衡量的不是 AI 多强，而是<strong>你的判断力是在变强还是在退化</strong>。</p>
+
+        <div class="q">
+          <label class="q-label">1. 你这次最后亲自核查过的、具体的一个主张是什么？</label>
+          <textarea id="scClaim" class="text-input area" rows="2"
+            placeholder="写下一个你真正去验证过的具体结论。写不出来，本身就是一个信号。"></textarea>
+        </div>
+
+        <div class="q">
+          <label class="q-label" id="q-think">2. 这次协作，你的思考是变多了还是变少了？</label>
+          <div class="scale" data-scale="think" role="group" aria-labelledby="q-think"></div>
+          <div class="scale-ends"><span>明显变少 / 被代劳</span><span>明显变多 / 被激发</span></div>
+        </div>
+
+        <div class="q">
+          <label class="q-label" id="q-challenge">3. 模型有没有真正挑战过你？（而不是一路附和）</label>
+          <div class="scale" data-scale="challenge" role="group" aria-labelledby="q-challenge"></div>
+          <div class="scale-ends"><span>全程迎合</span><span>被有力反驳</span></div>
+        </div>
+
+        <div class="q">
+          <label class="q-label" id="q-eval">4. 这次你更像在「生产」还是在「评价」？</label>
+          <div class="scale" data-scale="eval" role="group" aria-labelledby="q-eval"></div>
+          <div class="scale-ends"><span>纯生产 / 照单全收</span><span>主动评价 / 做判断</span></div>
+        </div>
+
+        <div class="score-readout" id="scoreReadout"></div>
+        <button class="btn primary wide" type="button" id="submitCheck">记录这次自检</button>
+        <p class="hint" id="checkHint"></p>
+      </div>
+    </section>
+
+    <!-- ============ 视图 4：趋势 ============ -->
+    <section class="view" id="view-trend">
+      <div class="panel">
+        <h2 class="panel-title">自检趋势曲线</h2>
+        <p class="sub">两条线：<span class="legend think">思考变多 / 变少</span> 与
+          <span class="legend eval">生产 vs 评价倾向</span>。看你的评价判断力是否在长期变强。</p>
+        <div class="chart-wrap" id="chartWrap"></div>
+        <div class="trend-stats" id="trendStats"></div>
+        <div class="empty" id="trendEmpty">还没有自检记录。去「自检打卡」完成第一次记录，曲线就会出现。</div>
+      </div>
+    </section>
+
+    <!-- ============ 视图 5：原理 ============ -->
+    <section class="view" id="view-principles">
+      <div class="panel narrow prose">
+        <h2 class="panel-title">原理说明：为什么要用 AI 督促 AI</h2>
+
+        <p class="lead">大模型被训练得「讨人喜欢」。它默认顺着你说，因为附和比反驳更安全。
+          于是越用越爽，却也越用越退化——你以为在借力，其实在外包自己的判断。
+          这个工具的全部目的，是把模型从<strong>迎合者</strong>重新配置成<strong>对手</strong>。</p>
+
+        <h3 class="sec">三原则，各自抵抗一种迎合</h3>
+        <div class="principle-doc">
+          <div class="pd">
+            <span class="pd-name">独立性</span>
+            <p>不让 AI 替你思考。它该逼你先把问题说清楚，而不是直接给你答案。
+              <em>抵抗的迎合行为：</em>主动代笔、抢着下结论，让你逐渐丧失独立产出的能力。</p>
+          </div>
+          <div class="pd">
+            <span class="pd-name">校准</span>
+            <p>让确信度显形。流畅的语言天然让人高估其可靠性。
+              <em>抵抗的迎合行为：</em>用漂亮措辞包装薄弱证据，制造虚假的确定感。</p>
+          </div>
+          <div class="pd">
+            <span class="pd-name">第一性原理</span>
+            <p>把「大家都这么说」拆回最底层的前提与约束。
+              <em>抵抗的迎合行为：</em>用共识、惯例、流行说法代替真正的推理。</p>
+          </div>
+        </div>
+
+        <h3 class="sec">探询模式 vs 委派模式</h3>
+        <p>动手前先想清楚：这件事你是要<strong>探询</strong>（自己还没想清，需要被追问、被挑战）
+          还是要<strong>委派</strong>（已经想清楚了，只是要把执行外包）。
+          搞反了最危险：把本该自己思考的探询，当成委派一键交出去——那正是「思考变少」的开始。</p>
+        <ul class="mode-list">
+          <li><b>探询模式</b>：让 AI 提问、反驳、列出你的盲点。衡量标准是「我的思考有没有被激发」。</li>
+          <li><b>委派模式</b>：让 AI 执行明确任务。衡量标准是「产出是否准确、是否仍由我做最终评价」。</li>
+        </ul>
+
+        <h3 class="sec">反退化判据：思考变多还是变少</h3>
+        <p>判断一次 AI 协作是帮了你还是害了你，最朴素的标尺只有一个：
+          <strong>用完之后，你的思考是变多了，还是变少了？</strong></p>
+        <ul class="mode-list">
+          <li>能说出一个你<strong>亲自核查过</strong>的具体主张 → 你还在评价，没有照单全收。</li>
+          <li>模型<strong>有力地反驳过你</strong>至少一次 → 它在当对手，不是当啦啦队。</li>
+          <li>你更偏向<strong>评价</strong>而非纯生产 → 你的判断力在被使用，因而在变强。</li>
+        </ul>
+        <p class="closing">把模型当对手（treat me as a rival），不是为了对抗而对抗，
+          而是因为：能让你思考变多的工具，才是真正属于内行的工具。</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>纯前端 · 零模型 API · 数据只存在你的浏览器 localStorage</span>
+    <span class="sep">·</span>
+    <span>灵感源自李笑来近期关于「用 AI 督促 AI / 把模型当对手 / 思考变多还是变少」的讨论</span>
+  </footer>
+
+  <!-- toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../shared/archive-recovery.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

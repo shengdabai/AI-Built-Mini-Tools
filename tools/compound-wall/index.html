@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="复利墙 · CompoundWall — 一面安静的修行墙，记录每日微小重复，见证复利的力量。" />
+  <meta name="theme-color" content="#faf8f3" />
+  <title>复利墙 · CompoundWall</title>
+
+  <!-- 内联 SVG favicon（暖橄榄绿方块，呼应品牌标记；避免 favicon.ico 404） -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237a9c41'/%3E%3Crect x='6' y='6' width='20' height='20' rx='5' fill='none' stroke='%23fffdf8' stroke-width='2'/%3E%3Crect x='11' y='11' width='10' height='10' rx='2.5' fill='%2350711f'/%3E%3C/svg%3E" />
+
+  <!-- 衬线标题字体（文人长期主义气质）+ 无衬线正文，CDN，离线降级到本地字体栈 -->
+  <!-- 字体表不阻塞首屏：国内网络访问 Google Fonts 常超时，原来的写法会一直白屏到请求失败；现在先用系统字体显示，字体到了再换上 -->
+
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body data-theme="auto">
+  <!-- ============ 顶栏 ============ -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <h1 class="brand-name">复利墙</h1>
+        <span class="brand-sub">CompoundWall · 日拱一卒</span>
+      </div>
+    </div>
+
+    <div class="topbar__actions">
+      <label class="habit-switch" for="habitSelect">
+        <span class="habit-switch__label">习惯</span>
+        <select id="habitSelect" class="habit-switch__select" aria-label="切换当前习惯"></select>
+      </label>
+      <button class="icon-btn" id="themeToggle" title="切换深浅色" aria-label="切换深浅色">
+        <span class="theme-icon" aria-hidden="true"></span>
+      </button>
+      <nav class="topnav" aria-label="主导航">
+        <button class="topnav__btn is-active" data-view="dashboard">面板</button>
+        <button class="topnav__btn" data-view="habits">习惯</button>
+        <button class="topnav__btn" data-view="share">分享</button>
+        <button class="topnav__btn" data-view="about">理念</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- ============ 主面板 ============ -->
+    <section class="view view--dashboard is-active" id="view-dashboard" aria-label="主面板">
+      <!-- streak 卡片组 -->
+      <div class="stat-row" id="statRow">
+        <article class="stat-card stat-card--accent">
+          <span class="stat-card__label">当前连续</span>
+          <strong class="stat-card__value"><span id="curStreak">0</span><i>天</i></strong>
+          <span class="stat-card__hint" id="curStreakHint">从今天开始，别断它</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__label">历史最长</span>
+          <strong class="stat-card__value"><span id="bestStreak">0</span><i>天</i></strong>
+          <span class="stat-card__hint">断签不归零，记录永存</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__label">累计打卡</span>
+          <strong class="stat-card__value"><span id="totalDays">0</span><i>天</i></strong>
+          <span class="stat-card__hint" id="totalSumHint">累计 0</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__label">本年完成度</span>
+          <strong class="stat-card__value"><span id="yearPct">0</span><i>%</i></strong>
+          <span class="stat-card__hint">365 天里走了多远</span>
+        </article>
+      </div>
+
+      <!-- 热力墙 -->
+      <article class="panel panel--wall">
+        <div class="panel__head">
+          <div>
+            <h2 class="panel__title" id="wallTitle">贡献热力墙</h2>
+            <p class="panel__desc" id="wallDesc">一年 53 周，每一格都是一次「比昨天进步一点」。</p>
+          </div>
+          <button class="btn btn--ghost btn--sm" id="todayCheckBtn">＋ 今日打卡</button>
+        </div>
+
+        <div class="wall-scroll">
+          <div class="wall" id="wall" role="group" aria-label="贡献热力墙"></div>
+        </div>
+
+        <div class="wall-foot">
+          <div class="wall-legend">
+            <span>少</span>
+            <span class="legend-cell" data-level="0"></span>
+            <span class="legend-cell" data-level="1"></span>
+            <span class="legend-cell" data-level="2"></span>
+            <span class="legend-cell" data-level="3"></span>
+            <span class="legend-cell" data-level="4"></span>
+            <span>多</span>
+          </div>
+          <span class="wall-foot__note" id="wallRangeNote"></span>
+        </div>
+      </article>
+
+      <!-- 复利曲线 -->
+      <article class="panel panel--curve">
+        <div class="panel__head">
+          <div>
+            <h2 class="panel__title">累计复利曲线</h2>
+            <p class="panel__desc">同样的每日积累，换个视角看，增长完全不同。</p>
+          </div>
+          <div class="seg-toggle" id="curveToggle" role="tablist" aria-label="曲线视角">
+            <button class="seg-toggle__btn is-active" data-mode="linear" role="tab">线性视角</button>
+            <button class="seg-toggle__btn" data-mode="compound" role="tab">复利视角</button>
+          </div>
+        </div>
+        <div class="curve-wrap">
+          <canvas id="curveCanvas" aria-label="累计增长曲线"></canvas>
+          <p class="curve-empty" id="curveEmpty">还没有数据。打第一次卡，曲线就开始生长。</p>
+        </div>
+        <p class="curve-caption" id="curveCaption"></p>
+      </article>
+    </section>
+
+    <!-- ============ 习惯管理 ============ -->
+    <section class="view view--habits" id="view-habits" aria-label="习惯管理">
+      <div class="view-head">
+        <h2 class="view-head__title">习惯管理</h2>
+        <p class="view-head__desc">每一个习惯，是一面独立的墙。少即是多，先把一件事做穿。</p>
+      </div>
+      <div class="habit-list" id="habitList"></div>
+      <button class="btn btn--primary" id="addHabitBtn">＋ 新增一个习惯</button>
+    </section>
+
+    <!-- ============ 分享导出 ============ -->
+    <section class="view view--share" id="view-share" aria-label="分享导出">
+      <div class="view-head">
+        <h2 class="view-head__title">分享 · 备份</h2>
+        <p class="view-head__desc">把这面墙导出成图，发给那个想放弃的自己。</p>
+      </div>
+
+      <div class="share-grid">
+        <div class="poster-stage">
+          <div class="poster" id="poster">
+            <div class="poster__head">
+              <span class="poster__mark" aria-hidden="true"></span>
+              <div>
+                <h3 class="poster__title" id="posterTitle">读书 · 复利墙</h3>
+                <p class="poster__sub" id="posterSub">日拱一卒，功不唐捐</p>
+              </div>
+            </div>
+            <div class="poster__stats" id="posterStats"></div>
+            <div class="wall poster__wall" id="posterWall" role="grid" aria-label="海报热力墙"></div>
+            <p class="poster__foot">复利墙 · CompoundWall — 重复，是渐进的迭代与递归。</p>
+          </div>
+        </div>
+
+        <div class="share-actions">
+          <button class="btn btn--primary" id="exportPngBtn">导出为图片 (PNG)</button>
+          <button class="btn btn--ghost" id="exportJsonBtn">导出数据备份 (JSON)</button>
+          <hr class="share-divider" />
+          <h4 class="share-actions__h">恢复数据</h4>
+          <p class="share-actions__hint">粘贴 JSON 或选择备份文件，覆盖恢复全部习惯与记录。</p>
+          <textarea id="importText" class="import-text" placeholder="在此粘贴备份 JSON…"></textarea>
+          <div class="share-actions__row">
+            <button class="btn btn--ghost btn--sm" id="importPasteBtn">从文本恢复</button>
+            <label class="btn btn--ghost btn--sm file-btn">
+              选择 JSON 文件
+              <input type="file" id="importFile" accept="application/json,.json" hidden />
+            </label>
+          </div>
+          <p class="storage-note" id="storageNote"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 理念页 ============ -->
+    <section class="view view--about" id="view-about" aria-label="理念">
+      <article class="essay">
+        <h2 class="essay__title">为什么是一面墙</h2>
+        <p class="essay__lead">106 天读完 5 部大部头，18 年每天写三千字。<br />这些数字之所以惊人，不在于某一天的英勇，而在于「每一天」。</p>
+
+        <blockquote class="essay__quote">
+          重复，本质上是渐进的迭代与递归。<br />
+          今天的你，站在昨天的你的肩膀上，再往前挪一寸。
+        </blockquote>
+
+        <p>复利的可怕之处，是它在前期看起来毫无波澜。线性增长的人盯着今天的产出，复利增长的人盯着今天的「重复」。前者计较一城一池，后者只问一句话——<strong>我有没有连上昨天？</strong></p>
+
+        <p>这面墙不做游戏化的彩带和金币。它只做一件事：把你「连续的」与「断掉的」如实画出来。绿格子越深，说明那天你比平均更用力；空格子也不指责你，它只是安静地提醒：明天还可以补上。</p>
+
+        <p>每一次打卡，我们都请你写一句「比昨天进步了什么」。这不是仪式，是一种<strong>递归的视角</strong>：你在用今天，定义一个更好一点点的基准线，明天的你将从这条线出发。</p>
+
+        <p class="essay__sign">— 把时间当作朋友，让复利替你做功。</p>
+      </article>
+    </section>
+  </main>
+
+  <!-- ============ 今日打卡 模态 ============ -->
+  <div class="modal" id="checkModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="checkModalTitle">
+      <div class="modal__head">
+        <h3 id="checkModalTitle" class="modal__title">今日打卡</h3>
+        <button class="icon-btn icon-btn--close" data-close aria-label="关闭">×</button>
+      </div>
+      <form id="checkForm" class="form">
+        <p class="form__habit" id="checkHabitName"></p>
+
+        <label class="field">
+          <span class="field__label">日期</span>
+          <input type="date" id="checkDate" class="field__input" required />
+        </label>
+
+        <label class="field">
+          <span class="field__label">今天的数值 <em id="checkUnit"></em></span>
+          <input type="number" id="checkValue" class="field__input" min="0.01" step="any" placeholder="例如 12" required inputmode="decimal" aria-describedby="checkValueHint" />
+          <small class="field__hint" id="checkValueHint">需大于 0（最小 0.01）。填 0 不算打卡，不会延续连续天数。</small>
+        </label>
+
+        <label class="field">
+          <span class="field__label">比昨天进步了什么？<small>（递归视角 · 微进步）</small></span>
+          <textarea id="checkNote" class="field__input field__textarea" maxlength="140" placeholder="例如：今天多读了 3 页，而且没有走神。"></textarea>
+        </label>
+
+        <div class="form__actions">
+          <button type="button" class="btn btn--ghost" data-close>取消</button>
+          <button type="submit" class="btn btn--primary">保存这一格</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ 习惯编辑 模态 ============ -->
+  <div class="modal" id="habitModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="habitModalTitle">
+      <div class="modal__head">
+        <h3 id="habitModalTitle" class="modal__title">新增习惯</h3>
+        <button class="icon-btn icon-btn--close" data-close aria-label="关闭">×</button>
+      </div>
+      <form id="habitForm" class="form">
+        <input type="hidden" id="habitId" />
+        <label class="field">
+          <span class="field__label">习惯名称</span>
+          <input type="text" id="habitName" class="field__input" maxlength="20" placeholder="例如 读书 / 朗读 / 写作" required />
+        </label>
+        <label class="field">
+          <span class="field__label">计量单位</span>
+          <input type="text" id="habitUnit" class="field__input" maxlength="8" placeholder="例如 页 / 分钟 / 字" required />
+        </label>
+        <div class="field">
+          <span class="field__label">标签色</span>
+          <div class="color-picker" id="colorPicker"></div>
+        </div>
+        <div class="form__actions form__actions--split">
+          <button type="button" class="btn btn--danger-ghost" id="deleteHabitBtn" hidden>删除此习惯</button>
+          <div class="form__actions">
+            <button type="button" class="btn btn--ghost" data-close>取消</button>
+            <button type="submit" class="btn btn--primary">保存</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ 里程碑庆祝 ============ -->
+  <div class="celebrate" id="celebrate" hidden>
+    <div class="celebrate__backdrop" data-close></div>
+    <div class="celebrate__card" role="dialog" aria-modal="true">
+      <div class="celebrate__ripple" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <span class="celebrate__num" id="celebrateNum">7</span>
+      <h3 class="celebrate__title" id="celebrateTitle">连续 7 天</h3>
+      <p class="celebrate__text" id="celebrateText">一周了。习惯的种子，开始扎根。</p>
+      <button class="btn btn--primary" data-close>继续前行</button>
+    </div>
+  </div>
+
+  <!-- hover 提示 -->
+  <div class="tip" id="tip" hidden></div>
+  <!-- toast 提示 -->
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- 本地 vendored html2canvas（单文件，无 npm） -->
+  <script src="./js/html2canvas.min.js"></script>
+  <!-- 经典脚本按依赖顺序加载，支持双击 file:// 直接打开（无需 ES Modules / 本地服务器） -->
+  <script src="./js/store.js"></script>
+  <script src="./js/stats.js"></script>
+  <script src="./js/curve.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

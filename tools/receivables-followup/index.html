@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>应收账款跟进清单</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>应收账款跟进清单</h1>
+    <p>这个工具按账龄(应收款已逾期多少天的分档)看清谁欠了多少、该先催谁,并为每张账单生成可复制的提醒草稿。第一步:点「载入示例」看一遍,或到「录入账单」填第一张。数据只存在这台电脑的浏览器里,不发送任何消息。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-import" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空全部账单、收款与跟进记录</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空所有账单、收款和跟进记录?</strong>此操作不能撤销,建议先备份 JSON。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空全部账单、收款与跟进记录</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong>载入合成示例会替换:</strong><span id="sample-scope"></span>。此操作不能撤销,建议先导出 JSON 备份。确认前现有数据不变。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">确认替换为示例</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">取消</button>
+    </div>
+  </div>
+  <div id="delete-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="delete-title" hidden>
+    <p id="delete-title"></p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-delete-yes">确认删除</button>
+      <button type="button" class="btn btn--secondary" id="btn-delete-no">取消</button>
+    </div>
+  </div>
+  <div id="import-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="import-title" hidden>
+    <p id="import-title"><strong>备份文件校验通过,确认后会替换现有数据。</strong><span id="import-summary"></span>提醒模板与跟进间隔也会换成备份里的设置。确认前现有数据不变。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-import-yes">确认用备份替换现有数据</button>
+      <button type="button" class="btn btn--secondary" id="btn-import-no">取消导入</button>
+    </div>
+  </div>
+  <p id="sample-badge" class="notice notice--warn" hidden><strong>当前含合成示例数据(不是真实账单)。</strong>清空,或导入真实备份后,这条提示消失;导出的文件名与内容也带「合成示例」。</p>
+  <div id="storage-recovery" class="notice notice--danger" role="alert" hidden>
+    <p><strong>原有本地数据没有通过校验。</strong><span id="storage-recovery-reason"></span>工具已禁止保存,所以原始数据不会被空白账本覆盖。请先下载原始文件,核对并修正后再导入。</p>
+    <button type="button" class="btn btn--danger" id="btn-storage-raw">下载未改动的原始数据</button>
+  </div>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份</button>
+  </div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden>
+    <p id="import-error-text"></p>
+  </div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <p class="today-bar">基准日 <strong id="today-label"></strong><span id="today-note"></span></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="aging" aria-current="page">账龄汇总</button>
+    <button type="button" class="tab" data-view="follow">跟进清单 <span class="count" id="follow-count">0</span></button>
+    <button type="button" class="tab" data-view="bills">全部账单 <span class="count" id="bill-count">0</span></button>
+    <button type="button" class="tab" data-view="entry">录入账单</button>
+  </nav>
+
+  <main>
+    <!-- 账龄汇总 -->
+    <section id="view-aging" class="view">
+      <div id="empty-guide" class="panel panel--guide" hidden>
+        <h2>还没有账单</h2>
+        <p>先点「载入合成示例」看一遍完整流程,或者按顺序操作:</p>
+        <ol class="steps">
+          <li>到「录入账单」填一条,或批量粘贴、导入 CSV。</li>
+          <li>回到「账龄汇总」看各账龄档的金额和笔数。</li>
+          <li>到「跟进清单」看今天要催谁,复制提醒草稿发出去,再记一次跟进。</li>
+          <li>对方付款后,在账单详情里登记收款,余额自动重算。</li>
+        </ol>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-sample-2">载入合成示例</button></div>
+      </div>
+      <div id="aging-body">
+        <div class="panel">
+          <div class="panel__head">
+            <div>
+              <h2>账龄汇总</h2>
+              <p class="hint">只统计余额大于 0 的账单。到期日当天算未到期,各币种分开汇总,不做汇率换算。</p>
+            </div>
+            <div class="row" role="group" aria-label="导出账龄">
+              <button type="button" class="btn btn--secondary" id="btn-aging-md">导出账龄表 Markdown</button>
+              <button type="button" class="btn btn--secondary" id="btn-aging-csv">导出账龄汇总 CSV</button>
+              <button type="button" class="btn btn--secondary" id="btn-aging-detail-csv">导出账龄明细 CSV</button>
+            </div>
+          </div>
+          <p id="export-pending" class="notice notice--warn" hidden>录入页有未保存的内容(正在编辑的账单、批量粘贴或 CSV 预览),导出已暂停:请先保存或清空这些内容。JSON 备份只含已保存的数据,不受影响。</p>
+          <div id="aging-out" class="aging-out"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 跟进清单 -->
+    <section id="view-follow" class="view" hidden>
+      <div class="panel">
+        <h2>提醒设置</h2>
+        <div class="form-grid">
+          <label class="field">多少天没跟进算「今天要跟」
+            <input type="number" id="fu-n" min="0" max="365" step="1">
+          </label>
+          <label class="field field--wide">提醒草稿模板(占位符:{客户} {账单号} {金额} {到期日} {逾期天数})
+            <textarea id="fu-template" rows="3"></textarea>
+          </label>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn--secondary" id="btn-template-reset">恢复默认模板</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <div>
+            <h2>逾期账单</h2>
+            <p class="hint">按逾期天数从长到短排列。有争议的账单单独标记,不进入「今天要跟」清单,由你人工处理。</p>
+          </div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="fu-only-today"> 只看今天要跟的</label>
+            <button type="button" class="btn btn--secondary" id="btn-follow-csv">导出跟进清单 CSV</button>
+          </div>
+        </div>
+        <div id="follow-out"></div>
+      </div>
+
+      <div id="work-panel" class="panel panel--work" hidden aria-live="polite"></div>
+    </section>
+
+    <!-- 全部账单 -->
+    <section id="view-bills" class="view" hidden>
+      <div class="panel">
+        <h2>全部账单</h2>
+        <p class="hint">含已结清的账单。点「处理」打开详情:提醒草稿、记录跟进、登记收款、改争议备注。</p>
+        <div id="bills-out"></div>
+      </div>
+    </section>
+
+    <!-- 录入 -->
+    <section id="view-entry" class="view" hidden>
+      <form class="panel" id="bill-form" novalidate>
+        <h2 id="bill-form-title">录入一张账单</h2>
+        <div class="form-grid">
+          <label class="field">客户
+            <input id="f-client" aria-describedby="bill-form-error" required autocomplete="off">
+          </label>
+          <label class="field">账单号
+            <input id="f-no" aria-describedby="bill-form-error" required autocomplete="off">
+          </label>
+          <label class="field">开票日(可空)
+            <input type="date" id="f-issue" aria-describedby="bill-form-error">
+          </label>
+          <label class="field">到期日
+            <input type="date" id="f-due" aria-describedby="bill-form-error" required>
+          </label>
+          <label class="field">应收金额
+            <input id="f-amount" aria-describedby="bill-form-error" inputmode="decimal" required autocomplete="off">
+          </label>
+          <label class="field">币种(3 位字母)
+            <input id="f-currency" value="CNY" maxlength="3" autocomplete="off" aria-describedby="bill-form-error">
+          </label>
+          <label class="field">迁移前已收(可空)
+            <input id="f-paid" aria-describedby="f-paid-help bill-form-error" inputmode="decimal" autocomplete="off">
+            <span class="field-help" id="f-paid-help">只在新建账单时使用,表示开始使用本工具前已经收到的金额;不会伪造收款记录。</span>
+          </label>
+          <label class="field">迁移前最近跟进(可空)
+            <input type="date" id="f-lastfollow" aria-describedby="f-lastfollow-help bill-form-error">
+            <span class="field-help" id="f-lastfollow-help">只在新建账单时使用,表示开始使用本工具前的最近跟进日期;不会伪造跟进记录。</span>
+          </label>
+          <label class="field field--wide">争议备注(有内容就算争议账单,可空)
+            <textarea id="f-dispute" rows="2" aria-describedby="bill-form-error"></textarea>
+          </label>
+        </div>
+        <p id="bill-form-error" class="form-error" role="alert" hidden></p>
+        <div class="row">
+          <button type="submit" class="btn btn--primary" id="btn-bill-save">保存账单</button>
+          <button type="button" class="btn btn--secondary" id="btn-bill-cancel" hidden>取消编辑</button>
+        </div>
+      </form>
+
+      <div class="panel">
+        <h2>批量粘贴</h2>
+        <p class="hint">每行一张账单:<code>客户 | 账单号 | 到期日 | 应收 | 已收</code>,已收可省略。分隔符可用 | 、全角 ｜ 或制表符(从 Excel 直接粘贴)。</p>
+        <div class="form-grid">
+          <label class="field field--wide">粘贴内容
+            <textarea id="batch-text" rows="5" placeholder="星河设计工作室 | XH-2026-030 | 2026-09-15 | 6800 | 0"></textarea>
+          </label>
+          <label class="field">这批账单的币种
+            <input id="batch-currency" value="CNY" maxlength="3" autocomplete="off">
+          </label>
+        </div>
+        <div id="batch-preview" class="batch-preview" aria-live="polite"></div>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-batch-add" disabled>加入识别成功的账单</button></div>
+      </div>
+
+      <div class="panel">
+        <h2>CSV 导入(选择列映射)</h2>
+        <p class="hint">选择 .csv 文件或直接粘贴 CSV 文本,再把每一列对应到字段。客户、账单号、到期日、应收必须对应。</p>
+        <div class="form-grid">
+          <label class="field">CSV 文件
+            <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv" aria-describedby="csv-file-error">
+          </label>
+          <label class="field">没有币种列时使用
+            <input id="csv-currency" value="CNY" maxlength="3" autocomplete="off">
+          </label>
+          <label class="field field--wide">或粘贴 CSV 文本(第一行是表头)
+            <textarea id="csv-text" rows="4"></textarea>
+          </label>
+        </div>
+        <p id="csv-file-error" class="notice notice--danger" role="alert" hidden></p>
+        <div id="csv-mapping" class="form-grid"></div>
+        <div id="csv-preview" class="batch-preview" aria-live="polite"></div>
+        <div class="row"><button type="button" class="btn btn--primary" id="btn-csv-add" disabled>导入识别成功的账单</button></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>不自动发送任何消息,不接银行,不计算利息或违约金;汇率不换算;争议处理靠人工。浏览器清除站点数据会丢失记录,请定期「备份 JSON」。</p>
+  </footer>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

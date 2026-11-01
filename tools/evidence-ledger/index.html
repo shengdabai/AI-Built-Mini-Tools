@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>证据台账 · 主张、来源与反证</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">自用研究工具 · 本机数据 · 不联网</span>
+      <h1>证据台账</h1>
+      <p class="muted">用来记录你下的结论(称为「主张」),给每条结论挂上来源(称为「证据」),再由规则自动判定它站不站得住;状态不能手选。第一步:点「新建项目」,或点「载入合成示例」看一遍。</p>
+      <p id="today-note" class="muted" hidden></p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入合成示例</button>
+      <button id="import-btn" type="button">导入 JSON 备份(校验后确认)</button>
+      <input id="import-json" type="file" accept="application/json" tabindex="-1" aria-hidden="true" class="visually-hidden">
+      <button id="new-project" type="button" class="primary">新建项目</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="warning" role="alert" hidden>
+    <span>保存失败:浏览器存储不可用或已满。刚才的改动只在这个页面的内存里,刷新或关闭就会丢失。</span>
+    <button id="warning-export" type="button" class="danger">导出 JSON 备份(页面里现有的全部项目)</button>
+  </div>
+
+  <div id="import-confirm" class="confirm" role="alertdialog" aria-labelledby="import-confirm-title" hidden>
+    <strong id="import-confirm-title">确认写入?</strong>
+    <div id="import-confirm-body" class="stack"></div>
+    <div class="row"><button id="import-confirm-yes" type="button" class="danger">确认写入</button><button id="import-confirm-no" type="button">取消,保持现状</button></div>
+  </div>
+
+  <section class="project-bar" aria-label="当前项目">
+    <label>当前项目
+      <select id="project-select" aria-label="选择项目"></select>
+    </label>
+    <div class="grid-2">
+      <label>项目标题<input id="project-title" type="text" maxlength="120" placeholder="例如:课时账单工具是否值得做"></label>
+      <label>研究问题<input id="project-question" type="text" maxlength="200" placeholder="谁在什么情境需要什么结果?"></label>
+    </div>
+    <p id="sample-badge" class="note-banner" hidden>合成示例:这个项目的主张和证据都是虚构的,导出的 Markdown 与 JSON 备份会标注「合成示例」。</p>
+    <div class="actions">
+      <label>日期<input id="project-date" type="date"></label>
+      <button id="delete-project" type="button" class="danger">删除当前项目</button>
+    </div>
+  </section>
+
+  <div id="project-confirm" class="confirm" hidden>
+    <strong>确认删除当前项目?</strong>
+    <span id="project-confirm-text" class="muted">项目下所有主张和证据会一起删除,无法恢复。建议先在「导出与数据」里导出备份。</span>
+    <div class="row"><button id="project-confirm-yes" type="button" class="danger">确认删除项目</button><button id="project-confirm-no" type="button">取消</button></div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="视图">
+    <button role="tab" data-tab="claims" aria-selected="true" type="button">主张与证据</button>
+    <button role="tab" data-tab="audit" aria-selected="false" type="button">检查</button>
+    <button role="tab" data-tab="export" aria-selected="false" type="button">导出与数据</button>
+  </nav>
+
+  <section id="tab-claims" class="workspace" role="tabpanel">
+    <aside class="panel">
+      <div class="row between">
+        <h2>主张</h2>
+        <span id="claim-count" class="muted"></span>
+      </div>
+      <div class="filters">
+        <input id="search" type="search" placeholder="搜索主张、摘录、来源…" aria-label="搜索">
+        <div class="grid-2">
+          <select id="filter-status" aria-label="按状态筛选">
+            <option value="">全部状态</option>
+            <option>待验证</option><option>已支持</option><option>已反驳</option><option>不确定</option>
+          </select>
+          <select id="filter-flag" aria-label="按警示筛选">
+            <option value="">全部警示</option>
+            <option value="noPrimary">缺一手证据</option>
+            <option value="aiOnly">仅 AI 生成证据</option>
+          </select>
+        </div>
+      </div>
+      <form id="claim-form" class="stack">
+        <label>新主张(一句话陈述)<textarea id="claim-text" maxlength="400" placeholder="例如:独立教师每月都要手工核对课时" aria-describedby="claim-text-error"></textarea></label>
+        <p id="claim-text-error" class="field-error" role="alert" hidden></p>
+        <button type="submit" class="primary">添加主张</button>
+      </form>
+      <div id="claim-list" class="claim-list" aria-live="polite"></div>
+    </aside>
+
+    <main id="detail" class="panel">
+      <div id="detail-empty" class="empty">左侧选一条主张,或先点页头的「载入合成示例」。</div>
+      <div id="detail-body" hidden>
+        <div class="detail-head">
+          <label>主张<textarea id="detail-text" maxlength="400" aria-describedby="detail-text-error dirty-note"></textarea></label>
+          <p id="detail-text-error" class="field-error" role="alert" hidden></p>
+          <div class="status-line">
+            <span id="detail-status" class="badge"></span>
+            <span id="detail-counts" class="muted"></span>
+            <span id="detail-flags"></span>
+          </div>
+          <label>把握程度备注(置信度,手写)<input id="detail-note" type="text" maxlength="300" placeholder="你为什么相信或怀疑这条主张"></label>
+          <div class="row">
+            <button id="save-claim" type="button" class="primary">保存主张</button>
+            <button id="delete-claim" type="button" class="danger">删除这条主张</button>
+            <span id="dirty-note" class="field-error" hidden>尚未保存:文字或备注已修改,点「保存主张」才会写入。</span>
+          </div>
+          <div id="dirty-confirm" class="confirm" role="alertdialog" aria-labelledby="dirty-confirm-title" hidden>
+            <strong id="dirty-confirm-title">这条主张有未保存的修改。</strong>
+            <div class="row"><button id="dirty-save" type="button" class="primary">保存并继续</button><button id="dirty-discard" type="button" class="danger">放弃修改并继续</button><button id="dirty-cancel" type="button">取消,留在这条主张</button></div>
+          </div>
+          <div id="claim-confirm" class="confirm" hidden>
+            <strong id="claim-confirm-text">确认删除这条主张及其全部证据?</strong>
+            <div class="row"><button id="claim-confirm-yes" type="button" class="danger">确认删除主张</button><button id="claim-confirm-no" type="button">取消</button></div>
+          </div>
+        </div>
+        <h3>证据</h3>
+        <div id="evidence-list" class="evidence-list"></div>
+        <form id="evidence-form" class="form">
+          <h3>添加证据</h3>
+          <div class="grid-3">
+            <label>类型<select id="ev-type"></select></label>
+            <label>立场<select id="ev-stance"></select></label>
+            <label>强度<select id="ev-strength"></select></label>
+          </div>
+          <div class="grid-2">
+            <label>来源标题<input id="ev-title" type="text" maxlength="200" aria-describedby="ev-error" placeholder="文档名 / 文章名 / 访谈对象代号"></label>
+            <label>来源链接（可留空；非个人观察缺链接时会提醒）<input id="ev-url" type="url" maxlength="500" placeholder="https://…"></label>
+          </div>
+          <label>摘录<textarea id="ev-excerpt" maxlength="1000" placeholder="原文怎么说,不要转述成结论"></textarea></label>
+          <div class="grid-2">
+            <label>日期<input id="ev-date" type="date"></label>
+            <label>局限说明<input id="ev-limit" type="text" maxlength="300" placeholder="样本多大、是否二手、过时与否"></label>
+          </div>
+          <div class="row"><button type="submit" class="primary">给当前主张加入这条证据</button><span id="ev-error" class="field-error" role="alert"></span></div>
+        </form>
+      </div>
+    </main>
+  </section>
+
+  <section id="tab-audit" class="panel" role="tabpanel" hidden>
+    <h2>检查:这个项目哪里站不住</h2>
+    <p class="muted">检查范围:当前项目的全部主张。规则来自本工具约定:无证据 = 待验证;任一强反对 = 已反驳;任一非 AI 支持 = 已支持;其余 = 不确定。不是通用学术标准。</p>
+    <div id="audit-body" class="stack"></div>
+  </section>
+
+  <section id="tab-export" class="panel" role="tabpanel" hidden>
+    <h2>导出与数据</h2>
+    <div class="stack">
+      <div class="row">
+        <button id="export-md" type="button" class="primary">下载「依据与局限」Markdown</button>
+        <button id="export-json" type="button">导出全部项目 JSON 备份</button>
+        <button id="import-btn-2" type="button">导入 JSON 备份(校验后确认)</button>
+      </div>
+      <p id="export-hint" class="field-error" hidden>主张详情里有未保存的修改:请先保存或放弃,再导出,否则导出的内容和屏幕上看到的不一致。</p>
+      <p class="muted">Markdown 是一种纯文本格式,可以直接贴进研究 HTML 的依据段;JSON 是保存全部项目的文本文件,用于备份和恢复。数据只存在当前浏览器的本地存储(键 evidence.v1),清理浏览器数据会丢失,请定期导出。预览和下载的都是已保存的内容。</p>
+      <h3>Markdown 预览</h3>
+      <pre id="md-preview" class="preview"></pre>
+      <div class="row"><button id="clear-data" type="button" class="danger">清空全部项目、主张和证据</button></div>
+      <div id="clear-confirm" class="confirm" hidden>
+        <strong>确认清空全部项目、主张和证据?</strong>
+        <span id="clear-confirm-text" class="muted">这会删除本浏览器里保存的所有台账数据。先导出备份再清空。</span>
+        <div class="row"><button id="clear-confirm-yes" type="button" class="danger">确认清空全部数据</button><button id="clear-confirm-no" type="button">取消</button></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footer">证据台账 · 门 1 自用工具 · 无付款证据。示例数据为合成,URL 指向 example.com。</p>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

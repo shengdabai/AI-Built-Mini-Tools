@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>字幕术语校对 · 术语、时间轴与差异复核</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <span class="eyebrow">字幕校对工作台 · 本机运行 · 不联网</span>
+      <h1>字幕术语校对</h1>
+      <p class="muted">检查字幕里的术语写法和时间轴问题,逐条接受替换;只改文字,时间轴与序号原样保留。第一步:点右上角「载入示例」看一遍流程,或把字幕粘贴到下方左侧文本框。SRT 和 WebVTT(网页视频字幕格式)都能读。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="clear-data" type="button" class="danger">清空字幕、术语表和选项</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner banner-danger" role="alert" hidden></div>
+  <div id="clear-confirm" class="confirm" hidden>
+    <strong>确认清空?</strong>
+    <span id="clear-confirm-scope" class="muted">字幕、术语表、选项和检查结果都会删除,无法恢复。建议先导出需要的文件。</span>
+    <div class="row"><button id="clear-confirm-yes" type="button" class="danger">确认清空字幕、术语表和选项</button><button id="clear-confirm-no" type="button">取消</button></div>
+  </div>
+  <div id="sample-confirm" class="confirm" role="alertdialog" aria-labelledby="sample-confirm-title" hidden>
+    <strong id="sample-confirm-title">确认载入合成示例?</strong>
+    <span id="sample-confirm-scope" class="muted"></span>
+    <div class="row"><button id="sample-confirm-yes" type="button" class="danger">确认用示例替换</button><button id="sample-confirm-no" type="button">取消</button></div>
+  </div>
+  <p id="sample-badge" class="banner banner-warn" hidden><strong>合成示例:</strong>当前字幕、术语表和问题都是虚构数据,仅用于演示;改动字幕或术语表、点「清空字幕、术语表和选项」后这个标记消失。</p>
+  <p id="status" class="muted status" role="status"></p>
+
+  <section class="panel inputs" aria-label="输入">
+    <div class="input-grid">
+      <div class="stack">
+        <div class="row between">
+          <label for="subtitle-text" class="label-strong">字幕(SRT 或 WebVTT)</label>
+          <label class="file-btn">选择文件<input id="subtitle-file" type="file" accept=".srt,.vtt,.txt,text/plain,text/vtt"></label>
+        </div>
+        <textarea id="subtitle-text" class="tall" spellcheck="false" placeholder="粘贴字幕内容,例如:&#10;1&#10;00:00:01,000 --> 00:00:03,000&#10;大家好"></textarea>
+        <p id="format-note" class="muted"></p>
+      </div>
+      <div class="stack">
+        <label for="glossary-text" class="label-strong">术语表(每行:标准写法 | 错误写法1, 错误写法2)</label>
+        <textarea id="glossary-text" class="tall" spellcheck="false" placeholder="GitHub&#10;拼音 | 拼因, 拼英&#10;只写标准写法时,检查大小写与全半角变体"></textarea>
+        <p class="muted">竖线和逗号可用全角。以 # 开头的行是注释。中文词按字面匹配,不做分词。</p>
+      </div>
+    </div>
+    <fieldset class="options">
+      <legend>检查选项</legend>
+      <label class="check"><input id="opt-case" type="checkbox"> 术语大小写敏感</label>
+      <label>字速上限(CPS,每秒字符数)<input id="opt-cps" type="number" min="1" step="1" inputmode="numeric" aria-describedby="opt-cps-err"><span class="field-error" id="opt-cps-err" hidden></span></label>
+      <label>单行字数(含中文)<input id="opt-cjk" type="number" min="1" step="1" inputmode="numeric" aria-describedby="opt-cjk-err"><span class="field-error" id="opt-cjk-err" hidden></span></label>
+      <label>单行字数(其他)<input id="opt-other" type="number" min="1" step="1" inputmode="numeric" aria-describedby="opt-other-err"><span class="field-error" id="opt-other-err" hidden></span></label>
+    </fieldset>
+    <div class="row">
+      <button id="run-check" type="button" class="primary">检查字幕</button>
+      <span id="stale-note" class="badge warn" hidden>输入或选项已改动,请重新检查</span>
+    </div>
+    <ul id="parse-errors" class="error-list" hidden></ul>
+  </section>
+
+  <section id="empty-guide" class="empty">
+    <strong>还没有字幕。</strong>
+    <span>粘贴字幕和术语表后点「检查字幕」,或点右上角「载入示例」看一遍完整流程。</span>
+  </section>
+
+  <section id="results" hidden>
+    <div id="summary" class="summary" aria-live="polite"></div>
+    <div class="results-grid">
+      <div class="panel">
+        <div class="row between">
+          <h2>问题列表</h2>
+          <label class="inline">显示
+            <select id="issue-filter" aria-label="筛选问题">
+              <option value="all">全部</option>
+              <option value="term">只看术语</option>
+              <option value="timing">只看时间轴与格式</option>
+              <option value="pending">只看未处理的术语</option>
+            </select>
+          </label>
+        </div>
+        <div class="row actions-row">
+          <button id="accept-all" type="button" class="primary">接受全部术语修正</button>
+          <button id="reset-decisions" type="button">重置接受/跳过选择</button>
+        </div>
+        <ul id="issue-list" class="issue-list"></ul>
+      </div>
+      <div class="panel">
+        <div class="row between"><h2>字幕预览</h2><span id="preview-note" class="muted"></span></div>
+        <div id="preview" class="preview"></div>
+      </div>
+    </div>
+
+    <div class="panel export">
+      <h2>导出</h2>
+      <p id="export-note" class="muted"></p>
+      <div class="row">
+        <button id="export-fixed" type="button" class="primary">导出修正后的字幕(原格式)</button>
+        <button id="export-md" type="button">导出问题报告 Markdown</button>
+        <button id="export-csv" type="button">导出问题报告 CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="muted foot">时间轴只报不改。字速与行长阈值是通用建议,不是某个平台的规范。不支持 ASS/SSA。</footer>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

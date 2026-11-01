@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>复利成长曲线模拟器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1>复利成长曲线模拟器</h1>
+      <p class="lede">先问「可以算出来吗」:拖动滑杆,看每天进步一点点到底值多少。r 是每天的成长率,T 是模拟的天数;第一步:拖动「日成长率 r」滑杆,曲线会立刻重画。</p>
+    </div>
+    <p class="disclaimer" role="note"><strong>这是数学演示,不是预测。</strong>不接任何真实资产数据,不构成投资建议或收益承诺。</p>
+  </div>
+</header>
+
+<main class="page">
+  <section class="toolbar" aria-label="数据操作">
+    <button type="button" id="load-sample" class="btn">载入示例(合成)</button>
+    <button type="button" id="add-scenario" class="btn">新增情景</button>
+    <button type="button" id="clear-data" class="btn btn-quiet">清空全部情景并恢复默认</button>
+    <span id="sample-badge" class="badge" hidden>合成示例</span>
+    <span id="save-status" class="muted" role="status" aria-live="polite"></span>
+  </section>
+  <div id="save-warning" class="notice notice-danger" role="alert" hidden></div>
+  <div id="load-notice" class="notice notice-danger" role="alert" hidden></div>
+  <div id="confirm-box" class="notice notice-warn" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button type="button" id="confirm-yes" class="btn btn-primary">确认</button>
+      <button type="button" id="confirm-no" class="btn">取消</button>
+    </div>
+  </div>
+  <div id="empty-guide" class="notice notice-info" hidden>
+    <p><strong>还没有保存的数据。</strong>下面已经放好一组默认参数(每天 1%,365 天):拖动滑杆试试,曲线会立刻重画。想对比不同习惯,点「载入示例(合成)」看 3 组情景并排。</p>
+  </div>
+
+  <div class="layout">
+    <aside class="side" aria-label="参数面板">
+      <section class="card">
+        <h2>情景</h2>
+        <div id="scenario-list" class="scenario-list" role="group" aria-label="选择情景"></div>
+        <p id="scenario-limit" class="muted" hidden>最多 3 组情景。</p>
+      </section>
+
+      <section class="card" id="params">
+        <h2>参数</h2>
+        <div class="field">
+          <label for="p-name">情景名称</label>
+          <input id="p-name" type="text" maxlength="60" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="r-num">日成长率 r(%,0–3)</label>
+          <div class="pair">
+            <input id="r-range" type="range" min="0" max="3" step="0.01" aria-label="日成长率滑杆">
+            <input id="r-num" type="number" min="0" max="3" step="0.01" inputmode="decimal">
+          </div>
+        </div>
+        <div class="field">
+          <label for="t-num">时长 T(天,30–3650)</label>
+          <div class="pair">
+            <input id="t-range" type="range" min="30" max="3650" step="1" aria-label="时长滑杆">
+            <input id="t-num" type="number" min="30" max="3650" step="1" inputmode="numeric">
+          </div>
+        </div>
+        <div class="field">
+          <label for="rest-num">每周休息天数(0–6,休息日 r=0)</label>
+          <div class="pair">
+            <input id="rest-range" type="range" min="0" max="6" step="1" aria-label="每周休息天数滑杆">
+            <input id="rest-num" type="number" min="0" max="6" step="1" inputmode="numeric">
+          </div>
+        </div>
+        <p class="muted">起点固定为 1.0 倍。</p>
+        <div class="field">
+          <span class="label">一次性倍率事件(第 D 天乘以 k)</span>
+          <p class="muted">D 是第几天;k 是倍率:小于 1 表示回退,大于 1 表示增长。</p>
+          <div id="events-list" class="events"></div>
+          <button type="button" id="add-event" class="btn">添加倍率事件</button>
+        </div>
+        <p id="param-error" class="error" role="alert" hidden></p>
+        <button type="button" id="delete-scenario" class="btn btn-quiet">删除当前情景</button>
+      </section>
+    </aside>
+
+    <div class="main">
+      <section class="card">
+        <div class="card-head">
+          <h2>增长曲线</h2>
+          <div class="chart-opts">
+            <label class="inline">Y 轴
+              <select id="y-scale">
+                <option value="log">对数刻度</option>
+                <option value="linear">线性刻度</option>
+              </select>
+            </label>
+            <label class="inline"><input type="checkbox" id="weekly-show"> 叠加周频曲线</label>
+          </div>
+          <p class="muted scale-note">对数刻度:相同高度差表示相同倍数变化(例如从 ×1 到 ×10 与从 ×10 到 ×100 一样高)。线性刻度:相同高度差表示相同数值变化。</p>
+        </div>
+        <ul id="legend" class="legend" aria-label="图例"></ul>
+        <div id="chart-wrap" class="chart-wrap">
+          <svg id="chart" role="img" aria-label="复利增长曲线图,横轴天数,纵轴倍数"></svg>
+          <div id="tooltip" class="tooltip" role="presentation" hidden></div>
+        </div>
+        <p class="muted">悬停或触摸曲线查看当天倍数。虚线灰色是「线性增长」对照(每个增长日 +r)。</p>
+        <ul id="stats" class="stats"></ul>
+      </section>
+
+      <section class="card">
+        <h2>对照表(当前情景)</h2>
+        <div class="table-scroll">
+          <table id="ref-table">
+            <caption class="sr">当前情景在不同时长下的倍数与线性对照</caption>
+            <thead><tr><th scope="col">时长 T</th><th scope="col">复利倍数</th><th scope="col">线性倍数</th><th scope="col">相当于线性的几倍</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="field target">
+          <label for="target-num">反算:想达到的目标倍数</label>
+          <input id="target-num" type="number" min="0" step="any" inputmode="decimal">
+          <p id="target-result" class="result" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>情景比较</h2>
+        <p id="compare-note" class="muted"></p>
+        <div class="table-scroll">
+          <table id="compare-table">
+            <caption class="sr">情景并排比较</caption>
+            <thead><tr><th scope="col">排名</th><th scope="col">情景</th><th scope="col">倍数</th><th scope="col">与第 1 名的倍数差</th><th scope="col">达到 2× 需要</th><th scope="col">比最快的多</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>每周进步一点点,也比没进步强</h2>
+        <div class="field">
+          <label for="r7-num">周频:每周只进步一次 r₇(%,0–25)</label>
+          <div class="pair">
+            <input id="r7-range" type="range" min="0" max="25" step="0.01" aria-label="周频增长率滑杆">
+            <input id="r7-num" type="number" min="0" max="25" step="0.01" inputmode="decimal">
+          </div>
+        </div>
+        <ul id="weekly-info" class="plain-list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>导出与导入</h2>
+        <div class="row">
+          <button type="button" id="export-csv" class="btn btn-primary">导出第 1–365 天 CSV</button>
+          <button type="button" id="export-json" class="btn">导出全部情景 JSON 备份</button>
+          <button type="button" id="pick-import" class="btn">导入 JSON 备份</button>
+          <input id="import-file" type="file" accept=".json,application/json" class="sr-input" tabindex="-1" aria-hidden="true">
+        </div>
+        <p class="muted">CSV 固定导出第 1–365 天,不覆盖完整时长 T;第 365 天之后的倍率事件不会进入这份序列(完整情景请用 JSON 备份)。</p>
+        <div id="import-error" class="notice notice-danger" role="alert" hidden></div>
+        <p class="muted">导入会整份校验:r 须在 0–3%、T 须为整数、事件日不能超过 T;任何一处不合法就整份拒绝,不会部分导入。</p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>模型是理想化的指数增长;真实成长不是每天等比。数据只保存在本机浏览器,不联网。</p>
+</footer>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

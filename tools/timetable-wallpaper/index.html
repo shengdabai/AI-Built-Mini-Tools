@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>课表壁纸生成器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1 class="brand-name">课表壁纸</h1>
+      <p class="brand-desc">填一次课表，导出手机锁屏、电脑桌面壁纸</p>
+    </div>
+    <nav class="topbar-actions" aria-label="数据操作">
+      <button type="button" class="btn btn-quiet" id="btn-sample">载入示例</button>
+      <label class="btn btn-quiet file-btn">导入 JSON<input type="file" id="file-import" accept=".json,application/json"></label>
+      <button type="button" class="btn btn-quiet" id="btn-export-json">导出 JSON</button>
+      <button type="button" class="btn btn-quiet btn-danger" id="btn-clear">清空数据</button>
+    </nav>
+  </header>
+
+  <div class="storage-alert" id="storage-alert" role="alert" hidden></div>
+
+  <main class="workspace">
+    <section class="editor-pane" aria-label="课表编辑">
+      <div class="panel">
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">壁纸标题</span>
+            <input type="text" id="input-title" maxlength="30" placeholder="例如：高二（3）班 课表">
+          </label>
+          <label class="field">
+            <span class="field-label">副标题（学期）</span>
+            <input type="text" id="input-subtitle" maxlength="30" placeholder="例如：2026—2027 学年 第一学期">
+          </label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">课表</h2>
+          <div class="panel-tools">
+            <span class="count" id="filled-count">已填 0 格</span>
+            <label class="switch"><input type="checkbox" id="toggle-weekend"><span>显示周六、周日</span></label>
+          </div>
+        </div>
+        <div class="empty-hint" id="empty-hint">
+          <p>还没有课程。点任意格子直接输入课程名（下方小字填教室，可不填），同名课程会自动配同一种颜色；也可以用「批量粘贴」一次填完。</p>
+          <button type="button" class="btn btn-secondary" id="btn-sample-inline">载入示例看看效果</button>
+        </div>
+        <div class="table-scroll">
+          <table class="grid-editor" id="grid-editor">
+            <thead><tr id="grid-head"></tr></thead>
+            <tbody id="grid-body"></tbody>
+          </table>
+        </div>
+        <datalist id="course-list"></datalist>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">节次与时间</h2>
+          <div class="panel-tools">
+            <button type="button" class="btn btn-secondary btn-small" id="btn-add-am">上午加一节</button>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-add-pm">下午加一节</button>
+          </div>
+        </div>
+        <ol class="period-list" id="period-list"></ol>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">批量粘贴</h2>
+        </div>
+        <label class="field">
+          <span class="field-label">每行一格：周几,第几节,课程,教室（教室可省略；中英文逗号或 Tab 均可）</span>
+          <textarea id="bulk-input" rows="5" placeholder="周一,1,语文,301&#10;周一,2,数学&#10;周三,6,物理,物理实验室"></textarea>
+        </label>
+        <div class="bulk-actions">
+          <button type="button" class="btn btn-secondary" id="btn-bulk">填入课表</button>
+          <p class="bulk-result" id="bulk-result" role="status"></p>
+        </div>
+        <ul class="bulk-errors" id="bulk-errors"></ul>
+      </div>
+    </section>
+
+    <section class="preview-pane" aria-label="壁纸预览与导出">
+      <div class="preview-controls">
+        <fieldset class="choice-group">
+          <legend class="field-label">模板</legend>
+          <div class="template-list" id="template-list"></div>
+        </fieldset>
+        <fieldset class="choice-group">
+          <legend class="field-label">尺寸</legend>
+          <div class="size-list" id="size-list"></div>
+        </fieldset>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="device" id="device">
+          <canvas id="wallpaper" width="1170" height="2532" aria-label="壁纸预览"></canvas>
+          <div class="lock-ref" id="lock-ref" aria-hidden="true">
+            <span class="lock-date" id="lock-date"></span>
+            <span class="lock-time">9:41</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-bar">
+        <label class="switch"><input type="checkbox" id="toggle-lock" checked><span>预览锁屏时钟位置（不会导出）</span></label>
+        <div class="export-main">
+          <span class="file-name" id="file-name"></span>
+          <button type="button" class="btn btn-primary" id="btn-export-png">下载 PNG 壁纸</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

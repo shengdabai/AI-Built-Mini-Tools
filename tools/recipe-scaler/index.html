@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配方缩放器 · 按份数或某一配料反推用量</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title-block">
+      <h1>配方缩放器</h1>
+      <p class="muted">录入配方,按份数或「我只有 350g 面粉」反推倍数。数据只存在这台电脑的浏览器里,不联网。第一步:点右侧「载入示例」看完整流程,或点「新建配方」。</p>
+    </div>
+    <div class="row">
+      <button id="load-sample" type="button">载入示例</button>
+      <button id="new-recipe" type="button" class="primary">新建配方</button>
+    </div>
+  </header>
+
+  <div id="save-warning" class="banner danger-box" role="alert" hidden>
+    <strong>未保存:</strong>浏览器拒绝写入本机存储(空间已满或被禁用)。关闭页面后这些改动会丢失,请现在点「导出 JSON 备份」另存。
+  </div>
+  <div id="sample-confirm" class="confirm" hidden>
+    <strong>示例配方已经在配方库里了,重新载入会覆盖你对示例配方做过的修改。</strong>
+    <span class="muted">只会替换这 3 份合成示例,其他配方不受影响。建议先导出 JSON 备份。</span>
+    <div class="row"><button id="sample-yes" type="button" class="danger">确认覆盖示例</button><button id="sample-no" type="button">取消</button></div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <div class="layout">
+    <aside class="library" aria-label="配方库">
+      <h2>配方库</h2>
+      <label>搜索(配方名或配料名)<input id="search" type="search" maxlength="60" placeholder="例如:面粉"></label>
+      <ul id="recipe-list" class="recipe-list"></ul>
+      <div class="stack">
+        <button id="export-json" type="button">导出全部配方 JSON 备份</button>
+        <button id="import-btn" type="button">导入配方 JSON 备份</button>
+        <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true">
+        <button id="clear-data" type="button" class="danger">清空全部配方</button>
+      </div>
+      <div id="clear-confirm" class="confirm" hidden>
+        <strong id="clear-title">确认清空全部配方?</strong>
+        <span class="muted" id="clear-detail">本机保存的所有配方会被删除,无法恢复。建议先导出备份。</span>
+        <div class="row"><button id="clear-yes" type="button" class="danger">确认清空</button><button id="clear-no" type="button">取消</button></div>
+      </div>
+      <div id="import-confirm" class="confirm" hidden>
+        <strong id="import-confirm-title">确认导入?</strong>
+        <ul id="import-confirm-list" class="preview-list"></ul>
+        <div class="row"><button id="import-yes" type="button" class="primary">确认导入</button><button id="import-no" type="button">取消</button></div>
+      </div>
+      <div id="import-error" class="banner danger-box" role="alert" hidden></div>
+    </aside>
+
+    <main class="main">
+      <section id="empty" class="card empty">
+        <h2>还没有配方</h2>
+        <p>点右上角「载入示例」看一遍完整流程,或点「新建配方」。配料每行一条,格式:<strong>名称 | 数量 | 单位 | 备注</strong>。</p>
+        <ul class="plain">
+          <li>数量可以写 <strong>1/2</strong>、<strong>1 1/2</strong>、<strong>2-3</strong>(范围,两端分别缩放)、<strong>半</strong>。</li>
+          <li>「适量」这类非数值原样保留,标「不缩放」。</li>
+          <li>也可以直接粘贴「面粉 500g」「500 g 糖」这样的行。</li>
+        </ul>
+      </section>
+
+      <div id="workspace" hidden>
+        <section class="card" aria-labelledby="h-edit">
+          <h2 id="h-edit">配方</h2>
+          <div class="grid-3">
+            <label class="span-2">配方名称<input id="r-name" type="text" maxlength="120" placeholder="例如:家庭吐司"></label>
+            <div class="inline-pair">
+              <label>原始产量<input id="r-yield" type="text" inputmode="decimal" placeholder="8" aria-describedby="yield-error"></label>
+              <label>单位<select id="r-yield-unit" aria-label="产量单位"></select></label>
+            </div>
+          </div>
+          <p id="yield-error" class="error" role="alert" hidden></p>
+          <label>配料(每行一条:名称 | 数量 | 单位 | 备注)
+            <textarea id="r-lines" rows="9" spellcheck="false" placeholder="面粉 | 500 | g | 高筋&#10;黄油 | 1 1/2 | 杯&#10;盐 | 适量"></textarea>
+          </label>
+          <ul id="parse-warnings" class="notes" aria-live="polite"></ul>
+          <div class="grid-2">
+            <label>基准配料(烘焙百分比用,通常是面粉)<select id="r-base"></select></label>
+            <label>备注<input id="r-notes" type="text" maxlength="500" placeholder="来源、注意事项"></label>
+          </div>
+          <div class="row">
+            <button id="delete-recipe" type="button" class="danger">删除这份配方</button>
+          </div>
+          <div id="delete-confirm" class="confirm" hidden>
+            <strong id="delete-title">确认删除这份配方?</strong>
+            <span class="muted" id="delete-detail">删除后无法恢复。</span>
+            <div class="row"><button id="delete-yes" type="button" class="danger">确认删除</button><button id="delete-no" type="button">取消</button></div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="h-scale">
+          <h2 id="h-scale">缩放</h2>
+          <div class="mode-row" role="radiogroup" aria-label="缩放方式">
+            <label class="radio"><input type="radio" name="mode" id="mode-servings" value="servings" checked> 按目标产量</label>
+            <label class="radio"><input type="radio" name="mode" id="mode-ingredient" value="ingredient"> 按某一配料的目标数量</label>
+          </div>
+          <div id="by-servings" class="grid-2">
+            <label>目标产量<input id="target-servings" type="text" inputmode="decimal" aria-describedby="scale-error"></label>
+            <div class="muted fill-note" id="servings-hint"></div>
+          </div>
+          <div id="by-ingredient" class="grid-3" hidden>
+            <label>以哪种配料为准<select id="target-ingredient"></select></label>
+            <label>你手上有多少<input id="target-amount" type="text" inputmode="decimal" placeholder="350" aria-describedby="scale-error"></label>
+            <label>单位<select id="target-unit"></select></label>
+          </div>
+          <div class="options">
+            <label class="check"><input type="checkbox" id="opt-auto" checked> 自动升降单位(1500 g 显示为 1.5 kg)</label>
+            <label>数字显示<select id="opt-format"><option value="decimal">小数(最多 2 位)</option><option value="fraction">分数(能表示时)</option></select></label>
+          </div>
+          <div class="factor-box">
+            <span class="muted">倍数</span>
+            <output id="factor-out" class="big" for="target-servings target-amount">×1</output>
+          </div>
+          <p id="scale-error" class="error" role="alert" hidden></p>
+        </section>
+
+        <section class="card" aria-labelledby="h-result">
+          <h2 id="h-result">缩放结果</h2>
+          <p id="result-yield" class="result-yield"></p>
+          <div class="table-wrap">
+            <table id="result-table">
+              <thead><tr><th scope="col">配料</th><th scope="col">原量</th><th scope="col">缩放后</th><th scope="col">计数取整</th><th scope="col">备注</th></tr></thead>
+              <tbody id="result-body"></tbody>
+            </table>
+          </div>
+          <p class="muted">烘焙时间和温度不会随份数缩放,请按实际模具和烤箱调整。杯、勺只在同单位内缩放,本版不做容积与质量互换。</p>
+        </section>
+
+        <section class="card" aria-labelledby="h-bp">
+          <h2 id="h-bp">烘焙百分比</h2>
+          <p class="muted">烘焙百分比(baker's percentage):每种配料的重量除以基准配料(通常是面粉)的重量,再乘 100。</p>
+          <div id="bp-box"></div>
+          <h3>反向:由百分比生成配方</h3>
+          <p class="muted">每行「名称 | 百分比」,其中必须有一行是 100(基准)。例如 面粉 | 100、水 | 70、盐 | 2。</p>
+          <div class="grid-3">
+            <label class="span-2">百分比清单<textarea id="pct-lines" rows="5" spellcheck="false" aria-describedby="pct-error" placeholder="面粉 | 100&#10;水 | 70&#10;盐 | 2"></textarea></label>
+            <div class="stack">
+              <label>基准重量(g)<input id="pct-base" type="text" inputmode="decimal" placeholder="500" aria-describedby="pct-error"></label>
+              <label>新配方名称<input id="pct-name" type="text" maxlength="120" placeholder="按百分比生成"></label>
+              <button id="pct-make" type="button" class="primary">生成配方</button>
+            </div>
+          </div>
+          <p id="pct-error" class="error" role="alert" hidden></p>
+        </section>
+
+        <section class="card" aria-labelledby="h-export">
+          <h2 id="h-export">导出缩放后的配方</h2>
+          <div class="row">
+            <button id="export-md" type="button" class="primary">下载缩放结果 Markdown</button>
+            <button id="export-csv" type="button">下载缩放结果 CSV</button>
+          </div>
+          <p id="export-hint" class="muted" aria-live="polite"></p>
+          <pre id="md-preview" class="preview" tabindex="0"></pre>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

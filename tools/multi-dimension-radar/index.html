@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多维竞争力雷达</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-head">
+  <div class="head-text">
+    <h1>多维竞争力雷达</h1>
+    <p class="tagline">记录各维度的自评分与证据,用雷达图比较当前分和目标分;图形面积由自评分计算。第一步:点「载入示例」看效果,或新建档案后给 3–10 个维度打分。</p>
+  </div>
+  <div class="toolbar" role="group" aria-label="数据操作">
+    <button type="button" class="btn" id="load-sample">载入示例</button>
+    <button type="button" class="btn" id="export-csv">导出维度分数 CSV</button>
+    <button type="button" class="btn" id="export-svg">导出雷达图 SVG</button>
+    <button type="button" class="btn" id="export-json">导出全部档案 JSON 备份</button>
+    <button type="button" class="btn" id="import-btn">导入 JSON 备份</button>
+    <input type="file" id="import-file" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-label="选择 JSON 备份文件">
+    <button type="button" class="btn btn-danger" id="clear-data">清空全部档案与快照</button>
+  </div>
+</header>
+
+<main class="page">
+  <div class="notices">
+    <p id="today-note" class="notice notice-info" hidden></p>
+    <p id="save-status" class="save-status" role="status">尚无修改。数据只存在本机浏览器。</p>
+    <div id="save-alert" class="notice notice-error" role="alert" hidden>
+      <p id="save-alert-text"></p>
+      <button type="button" class="btn" id="save-alert-export">导出当前内存中的全部档案 JSON 备份</button>
+    </div>
+    <div id="confirm-box" class="notice notice-confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+      <p id="confirm-text"></p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-danger" id="confirm-yes">确认</button>
+        <button type="button" class="btn" id="confirm-no">取消</button>
+      </div>
+    </div>
+    <p id="message" class="notice notice-info" role="status" hidden></p>
+    <p id="export-note" class="notice notice-warn" hidden>有输入框的内容不合法,界面显示与已保存数据不一致。请先改正(红框处),再导出。</p>
+  </div>
+
+  <section id="empty-state" class="panel empty" aria-labelledby="empty-title">
+    <h2 id="empty-title">还没有档案</h2>
+    <p>档案就是一次自评:3–10 个维度,每个维度给当前分、目标分和一句证据。可以建多个档案,比如「自己 2024」「自己 2026」「对标者」。</p>
+    <div class="btn-row">
+      <button type="button" class="btn btn-primary" id="empty-load-sample">载入示例(合成数据)</button>
+      <form class="inline-form" id="empty-new-form">
+        <label for="empty-new-name" class="visually-hidden">新档案名称</label>
+        <input type="text" id="empty-new-name" placeholder="新档案名称,例如:自己 2026" autocomplete="off" aria-describedby="message">
+        <button type="submit" class="btn">新建档案</button>
+      </form>
+    </div>
+    <p class="muted-note">分数全部自评,没有外部校准;面积只是一种直觉化口径。本工具不打总分排名、不比较他人真实数据、不给职业建议。数据只保存在本机浏览器。</p>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+   <div class="split">
+    <div class="col-edit">
+      <section class="panel" aria-labelledby="profiles-title">
+        <h2 id="profiles-title">档案</h2>
+        <div id="profile-tabs" class="tabs" role="group" aria-label="切换档案"></div>
+        <div class="btn-row">
+          <form class="inline-form" id="new-form">
+            <label for="new-name" class="visually-hidden">新档案名称</label>
+            <input type="text" id="new-name" placeholder="新档案名称" autocomplete="off" aria-describedby="message">
+            <button type="submit" class="btn">新建空白档案</button>
+          </form>
+          <button type="button" class="btn" id="clone-profile">复制当前档案</button>
+          <button type="button" class="btn btn-danger" id="delete-profile">删除当前档案</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="editor-title">
+        <h2 id="editor-title">维度与分数</h2>
+        <div class="field">
+          <label for="profile-name">档案名称</label>
+          <input type="text" id="profile-name" autocomplete="off" aria-describedby="profile-name-err">
+          <p class="field-err" id="profile-name-err" hidden></p>
+        </div>
+        <p id="synthetic-badge" class="badge" hidden>合成示例:人物与分数均为虚构</p>
+        <div id="dim-list" class="dim-list"></div>
+        <div class="btn-row">
+          <button type="button" class="btn" id="add-dim">添加维度</button>
+          <span id="dim-count" class="muted-note"></span>
+        </div>
+      </section>
+    </div>
+
+    <div class="col-view">
+      <section class="panel panel-chart" aria-labelledby="chart-title">
+        <h2 id="chart-title">雷达图</h2>
+        <div class="chart-opts">
+          <label class="check"><input type="checkbox" id="show-target" checked> 显示目标分</label>
+          <div class="field field-inline">
+            <label for="compare-select">叠加另一个档案</label>
+            <select id="compare-select"></select>
+          </div>
+        </div>
+        <div class="radar-wrap" id="radar-wrap">
+          <div class="radar-plot" id="radar-plot">
+            <div id="radar-host"></div>
+            <div id="radar-labels"></div>
+          </div>
+          <div id="radar-tip" class="tip" role="tooltip" hidden></div>
+        </div>
+        <ul class="legend" id="legend"></ul>
+        <p id="compare-note" class="muted-note" hidden></p>
+        <p class="muted-note">悬停(或用 Tab 聚焦)任一顶点,查看该维度的分数与证据。</p>
+
+        <div class="stats" aria-label="面积计算">
+          <div class="stat"><span class="stat-label">当前面积</span><span class="stat-value" id="area-value">0</span></div>
+          <div class="stat"><span class="stat-label">占满分面积</span><span class="stat-value" id="area-pct">0%</span></div>
+          <div class="stat"><span class="stat-label">目标面积</span><span class="stat-value" id="area-target">0</span></div>
+        </div>
+        <p id="area-explain" class="explain"></p>
+        <div class="two-views">
+          <div>
+            <h3>第一名口径</h3>
+            <p id="top-dim"></p>
+          </div>
+          <div>
+            <h3>面积口径</h3>
+            <p id="area-sectors"></p>
+          </div>
+        </div>
+        <h3>提示</h3>
+        <ul id="hints" class="hints"></ul>
+      </section>
+    </div>
+   </div>
+
+    <section class="panel panel-wide" aria-labelledby="alloc-title">
+      <h2 id="alloc-title">投入建议(规则计算,不是 AI)</h2>
+      <p class="explain">每周小时按「离目标差距 × 权重」分配;权重可改。边际面积(marginal area)是该维度每提高 1 分,雷达图形面积增加多少,取决于相邻两个维度的分数之和。这里没有计入提分所需的小时数,不能据此判断每小时的提升效果。快照指某一天把各维度当前分整份记下来的一条记录。</p>
+      <div class="field field-inline">
+        <label for="weekly-hours">每周可投入小时</label>
+        <input type="number" id="weekly-hours" min="0" step="0.5" inputmode="decimal" aria-describedby="weekly-hours-err">
+        <p class="field-err" id="weekly-hours-err" hidden></p>
+      </div>
+      <p id="best-dim" class="callout"></p>
+      <div class="table-scroll">
+        <table class="table" id="alloc-table">
+          <thead>
+            <tr><th scope="col">维度</th><th scope="col">当前</th><th scope="col">目标</th><th scope="col">差距</th><th scope="col">权重</th><th scope="col">建议小时</th><th scope="col">现投入小时</th><th scope="col">边际面积 / 分</th></tr>
+          </thead>
+          <tbody id="alloc-body"></tbody>
+        </table>
+      </div>
+      <p id="alloc-note" class="muted-note"></p>
+    </section>
+
+    <section class="panel panel-wide" aria-labelledby="timeline-title">
+      <h2 id="timeline-title">时间线:面积随时间</h2>
+      <div class="snap-form">
+        <div class="field field-inline">
+          <label for="snap-date">快照日期</label>
+          <input type="date" id="snap-date" aria-describedby="snap-err">
+        </div>
+        <button type="button" class="btn btn-primary" id="snap-add">把当前分数记为快照</button>
+      </div>
+      <p id="snap-err" class="field-err" role="alert" hidden></p>
+      <div class="timeline-grid">
+        <div>
+          <div id="tl-chart" class="tl-chart"></div>
+          <p id="tl-caption" class="muted-note"></p>
+        </div>
+        <div>
+          <p id="month-compare" class="callout"></p>
+          <div class="table-scroll">
+            <table class="table" id="snap-table">
+              <thead><tr><th scope="col">日期</th><th scope="col">维度数</th><th scope="col">面积</th><th scope="col">操作</th></tr></thead>
+              <tbody id="snap-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <p>分数是自评,没有外部校准;面积只是一种直觉化口径。不打总分排名、不比较他人真实数据、不给职业建议。数据只存在本机浏览器(localStorage),不联网。</p>
+  </footer>
+</main>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

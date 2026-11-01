@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>决策复查工作台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace">跳到工作区</a>
+  <header class="topbar">
+    <div>
+      <h1>决策复查工作台</h1>
+      <p>本机离线使用。先记录可检验问题和事前概率。到期后再追加实际结果，原预测不会被覆盖。</p>
+    </div>
+    <div class="status-stack">
+      <span id="todayBadge" class="badge"></span>
+      <span id="sampleBadge" class="badge badge-warning" hidden>当前数据：包含合成示例</span>
+    </div>
+  </header>
+
+  <main id="workspace" class="workspace">
+    <section class="metrics" aria-label="统计口径">
+      <article><strong id="totalMetric">0</strong><span>全部决策</span><small>包含待复查和已复查</small></article>
+      <article><strong id="dueMetric">0</strong><span>到期未复查</span><small>复查日早于基准日</small></article>
+      <article><strong id="resolvedMetric">0</strong><span>已复查</span><small>仅有二元实际结果的记录</small></article>
+      <article><strong id="brierMetric">—</strong><span>真实记录 Brier 分数</span><small id="brierHelp">无已复查的用户记录；合成示例不进入统计</small></article>
+    </section>
+
+    <section class="panel action-panel" aria-labelledby="actionsTitle">
+      <div><h2 id="actionsTitle">数据与恢复</h2><p>数据只保存在此浏览器。重要记录请定期导出 JSON 备份。</p></div>
+      <div class="button-row">
+        <button id="loadSample" type="button" class="button-secondary">载入合成示例</button>
+        <button id="importTrigger" type="button" class="button-secondary">导入 JSON 备份</button>
+        <input id="importFile" class="visually-hidden" type="file" accept="application/json,.json" tabindex="-1">
+        <button id="exportJson" type="button">导出全部数据 JSON</button>
+        <button id="exportMarkdown" type="button">导出决策记录 Markdown</button>
+        <button id="clearAll" type="button" class="button-danger">清空全部本机数据</button>
+      </div>
+      <div id="pendingAction" class="confirm-box" hidden role="region" aria-live="polite">
+        <p id="pendingMessage"></p>
+        <div class="button-row"><button id="confirmAction" type="button" class="button-danger">确认替换</button><button id="cancelAction" type="button" class="button-secondary">取消</button></div>
+      </div>
+      <p id="storageStatus" class="status" role="status">正在读取本机记录…</p>
+    </section>
+
+    <div class="layout">
+      <section class="panel" aria-labelledby="newTitle">
+        <h2 id="newTitle">记录事前预测</h2>
+        <p>概率可以是 0% 或 100%，但必须写清理由。保存后修改会形成新版本。</p>
+        <form id="decisionForm" novalidate>
+          <label for="title">标题</label><input id="title" name="title" maxlength="200" required><p class="field-error" id="titleError"></p>
+          <label for="question">可检验问题</label><textarea id="question" name="question" maxlength="1000" required></textarea><p class="field-error" id="questionError"></p>
+          <div class="field-grid">
+            <div><label for="probability">事前概率（0–100%）</label><input id="probability" name="probability" type="number" min="0" max="100" step="1" required><p class="field-error" id="probabilityError"></p></div>
+            <div><label for="dueDate">复查日期</label><input id="dueDate" name="dueDate" type="date" required><p class="field-error" id="dueDateError"></p></div>
+          </div>
+          <label for="reasons">当时的理由</label><textarea id="reasons" name="reasons" maxlength="4000" required></textarea><p class="field-error" id="reasonsError"></p>
+          <label for="evidence">当时可得的证据（可空）</label><textarea id="evidence" name="evidence" maxlength="4000"></textarea><p class="field-error" id="evidenceError"></p>
+          <div class="button-row"><button type="submit">保存事前预测</button><button id="cancelEdit" type="button" class="button-secondary" hidden>取消修改</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="queueTitle">
+        <div class="section-heading"><div><h2 id="queueTitle">复查队列</h2><p id="queueSummary">尚无记录。</p></div><div class="filters" role="group" aria-label="筛选决策"><button type="button" data-filter="all" aria-pressed="true">全部</button><button type="button" data-filter="overdue" aria-pressed="false">到期</button><button type="button" data-filter="open" aria-pressed="false">未到期</button><button type="button" data-filter="resolved" aria-pressed="false">已复查</button></div></div>
+        <div id="decisionList" class="decision-list"></div>
+        <div id="emptyState" class="empty-state"><strong>还没有决策记录</strong><p>先在左侧写下一条可检验问题、概率和复查日期。也可以载入合成示例查看完整流程。</p></div>
+      </section>
+    </div>
+
+    <section id="legacyPanel" class="panel" hidden aria-labelledby="legacyTitle">
+      <h2 id="legacyTitle">旧版原文记录</h2>
+      <p>检测到旧研究页保存的 before / after 原文。导入后只作为原文存档，不制造概率、日期或实际结果，也不进入校准统计。</p>
+      <div class="button-row"><button id="migrateLegacy" type="button">导入旧版原文</button><button id="dismissLegacy" type="button" class="button-secondary">本次忽略</button></div>
+      <div id="legacyList"></div>
+    </section>
+  </main>
+
+  <template id="reviewTemplate">
+    <form class="review-form" novalidate>
+      <h3>追加实际结果</h3>
+      <p>只有能判断“发生”或“未发生”时才保存。结果仍未知时，保留在复查队列，不进入校准统计。</p>
+      <div class="field-grid"><div><label>实际结果</label><select name="outcome"><option value="">请选择</option><option value="1">发生</option><option value="0">未发生</option></select></div><div><label>复查日期</label><input name="reviewedOn" type="date"></div></div>
+      <label>复查结论</label><textarea name="summary" maxlength="4000"></textarea>
+      <label>偏差分类</label><select name="bias"></select>
+      <label>下一次检验（可空）</label><textarea name="nextTest" maxlength="4000"></textarea>
+      <p class="field-error form-error"></p>
+      <div class="button-row"><button type="submit">保存实际结果</button><button type="button" data-cancel-review class="button-secondary">取消</button></div>
+    </form>
+  </template>
+
+  <script src="core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

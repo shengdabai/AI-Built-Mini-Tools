@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>报价版本差异说明</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <h1>报价版本差异说明</h1>
+    <p>这个工具把旧版和新版报价表按项目编码逐项对比,生成给客户的变更说明,并留下是否已向客户确认的记录。第一步:点「载入合成示例」看一遍,或把两份报价表粘贴到下面。数据只存在这台电脑的浏览器里。</p>
+  </div>
+  <div class="app-header__actions" role="group" aria-label="数据操作">
+    <button type="button" class="btn btn--on-dark" id="btn-sample">载入合成示例</button>
+    <button type="button" class="btn btn--on-dark" id="btn-sample-error">错误示例(重复编码)</button>
+    <button type="button" class="btn btn--on-dark" id="btn-export-json">导出 JSON 备份</button>
+    <button type="button" class="btn btn--on-dark" id="btn-import">导入 JSON 备份(先预览再替换)</button>
+    <input type="file" id="file-import-json" accept=".json,application/json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+    <button type="button" class="btn btn--on-dark" id="btn-clear">清空输入与全部确认记录</button>
+  </div>
+</header>
+
+<div class="shell">
+  <div id="clear-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="clear-title" hidden>
+    <p id="clear-title"><strong>确认清空输入内容和全部确认记录?</strong>此操作不能撤销,建议先备份 JSON。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-clear-yes">确认清空输入与全部确认记录</button>
+      <button type="button" class="btn btn--secondary" id="btn-clear-no">取消</button>
+    </div>
+  </div>
+  <div id="sample-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="sample-title" hidden>
+    <p id="sample-title"><strong>确认用示例替换当前输入?</strong>现有的旧版、新版报价文本和版本名会被覆盖(已保存的确认记录不受影响)。建议先备份 JSON。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-sample-yes">确认替换</button>
+      <button type="button" class="btn btn--secondary" id="btn-sample-no">取消</button>
+    </div>
+  </div>
+  <div id="import-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="import-title" hidden>
+    <p id="import-title"><strong>备份文件校验通过,确认后会替换现有数据。</strong><span id="import-summary"></span>确认前现有数据不变。</p>
+    <div class="row">
+      <button type="button" class="btn btn--danger" id="btn-import-yes">确认用备份替换现有数据</button>
+      <button type="button" class="btn btn--secondary" id="btn-import-no">取消导入</button>
+    </div>
+  </div>
+  <p id="sample-badge" class="notice notice--warn" hidden><strong>当前输入是合成示例(不是真实报价)。</strong>清空,或导入真实备份后,这条提示消失;导出的文件名与内容也带「合成示例」。</p>
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本地存储,刚才的改动只在当前页面里,关闭页面就会丢失。请立即导出 JSON 备份。</p>
+    <button type="button" class="btn btn--danger" id="btn-save-warning-export">导出 JSON 备份</button>
+  </div>
+  <div id="import-error" class="notice notice--danger" role="alert" hidden></div>
+  <p id="flash" class="notice" role="status" hidden></p>
+
+  <nav class="tabs" aria-label="功能分区">
+    <button type="button" class="tab" data-view="compare" aria-current="page">对比</button>
+    <button type="button" class="tab" data-view="explain">变更说明</button>
+    <button type="button" class="tab" data-view="records">确认记录 <span class="count" id="record-count">0</span></button>
+  </nav>
+
+  <main>
+    <section id="view-compare" class="view">
+      <div id="empty-guide" class="panel panel--guide">
+        <h2>还没有报价表</h2>
+        <p>先点「载入合成示例」看一遍完整流程,或者按下面三步操作:</p>
+        <ol class="steps">
+          <li>把旧版报价表粘贴到左边,新版粘贴到右边。格式是 CSV(用逗号分隔列的文本)或 TSV(用制表符分隔列的文本,从 Excel 复制出来就是这种),第一行是表头,也可以选文件。</li>
+          <li>确认列对应关系(列映射:告诉工具哪一列是编码、数量、单价),「项目编码」必选,然后点「对比两版」。</li>
+          <li>到「变更说明」编辑文字,再到「确认记录」保存这一版。</li>
+        </ol>
+      </div>
+
+      <div class="grid-2">
+        <section class="panel" aria-labelledby="old-title">
+          <h2 id="old-title">旧版报价</h2>
+          <label class="field" for="old-text"><span>粘贴 CSV / TSV(第一行为表头)</span>
+            <textarea id="old-text" rows="9" spellcheck="false"></textarea></label>
+          <label class="field" for="old-file"><span>或选择文件(.csv / .tsv / .txt)</span>
+            <input type="file" id="old-file" accept=".csv,.tsv,.txt,text/csv,text/plain" aria-describedby="old-file-error"></label>
+          <p id="old-file-error" class="notice notice--danger" role="alert" hidden></p>
+          <div id="old-file-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="old-file-confirm-text" hidden>
+            <p id="old-file-confirm-text"></p>
+            <div class="row">
+              <button type="button" class="btn btn--danger" id="old-file-yes">确认用文件替换旧版报价</button>
+              <button type="button" class="btn btn--secondary" id="old-file-no">取消,保留现有内容</button>
+            </div>
+          </div>
+          <fieldset class="mapping" id="old-mapping"><legend>列对应(旧版)</legend><div class="mapping__grid" id="old-mapping-grid"></div></fieldset>
+        </section>
+        <section class="panel" aria-labelledby="new-title">
+          <h2 id="new-title">新版报价</h2>
+          <label class="field" for="new-text"><span>粘贴 CSV / TSV(第一行为表头)</span>
+            <textarea id="new-text" rows="9" spellcheck="false"></textarea></label>
+          <label class="field" for="new-file"><span>或选择文件(.csv / .tsv / .txt)</span>
+            <input type="file" id="new-file" accept=".csv,.tsv,.txt,text/csv,text/plain" aria-describedby="new-file-error"></label>
+          <p id="new-file-error" class="notice notice--danger" role="alert" hidden></p>
+          <div id="new-file-confirm" class="notice notice--warn" role="alertdialog" aria-labelledby="new-file-confirm-text" hidden>
+            <p id="new-file-confirm-text"></p>
+            <div class="row">
+              <button type="button" class="btn btn--danger" id="new-file-yes">确认用文件替换新版报价</button>
+              <button type="button" class="btn btn--secondary" id="new-file-no">取消,保留现有内容</button>
+            </div>
+          </div>
+          <fieldset class="mapping" id="new-mapping"><legend>列对应(新版)</legend><div class="mapping__grid" id="new-mapping-grid"></div></fieldset>
+        </section>
+      </div>
+
+      <div class="row row--bar">
+        <button type="button" class="btn btn--primary" id="btn-compare">对比两版</button>
+        <button type="button" class="btn btn--secondary" id="btn-export-csv" disabled>导出差异表 CSV</button>
+        <span id="stale-note" class="hint" role="status"></span>
+      </div>
+
+      <div id="errors-box" class="notice notice--danger" role="alert" hidden></div>
+      <div id="warnings-box" class="notice notice--warn" hidden></div>
+
+      <section id="result" class="panel" hidden aria-labelledby="result-title">
+        <h2 id="result-title">对比结果</h2>
+        <dl class="totals" id="totals"></dl>
+        <p class="hint" id="result-summary"></p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="差异明细表,可横向滚动">
+          <table class="diff-table">
+            <thead><tr><th scope="col">类型</th><th scope="col">项目编码</th><th scope="col">项目名称</th><th scope="col">旧值 → 新值</th><th scope="col" class="num">金额影响</th></tr></thead>
+            <tbody id="diff-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-explain" class="view" hidden>
+      <section class="panel" aria-labelledby="explain-title">
+        <h2 id="explain-title">变更说明(Markdown,可编辑)</h2>
+        <p id="explain-stale" class="notice notice--warn" hidden>输入或列对应已改动,当前说明对应的是上一次对比。请先回到「对比」重新对比。</p>
+        <p id="explain-empty" class="hint">还没有对比结果,也没有保存过说明草稿。请先到「对比」页点「对比两版」。</p>
+        <p id="explain-kept" class="notice notice--warn" hidden>说明文字保留了你上次手动编辑的内容,可能与最新对比不一致。点「重新生成」可按最新对比覆盖。</p>
+        <p id="explain-saved-only" class="notice notice--warn" hidden>这是上次保存的说明草稿,尚未对应最新对比。请回到「对比」页重新对比后再导出。</p>
+        <div id="explain-box" hidden>
+          <label class="check"><input type="checkbox" id="only-amount"> 只列影响金额的项(切换会重新生成并覆盖手动编辑)</label>
+          <label class="field" for="explain-text"><span>说明文字</span>
+            <textarea id="explain-text" rows="16" aria-describedby="explain-status"></textarea></label>
+          <p id="explain-status" class="hint" role="status"></p>
+          <div class="row">
+            <button type="button" class="btn btn--primary" id="btn-export-md">导出变更说明 Markdown</button>
+            <button type="button" class="btn btn--secondary" id="btn-regen">重新生成(覆盖手动编辑)</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-records" class="view" hidden>
+      <section class="panel" aria-labelledby="save-title">
+        <h2 id="save-title">保存一条版本对比记录</h2>
+        <p id="record-block" class="hint">需要先在「对比」页得到最新的对比结果,才能保存。</p>
+        <form id="record-form" autocomplete="off" hidden>
+          <p id="base-date" class="hint"></p>
+          <div class="form-grid">
+            <label class="field" for="rec-name"><span>版本名</span><input type="text" id="rec-name" maxlength="80" placeholder="例如:装修报价 V2" aria-describedby="record-error"></label>
+            <label class="check check--field"><input type="checkbox" id="rec-confirmed"> 已向客户确认</label>
+            <label class="field" for="rec-date"><span>确认日期</span><input type="date" id="rec-date" disabled aria-describedby="record-error"></label>
+            <label class="field" for="rec-note"><span>备注(可选)</span><input type="text" id="rec-note" maxlength="200"></label>
+          </div>
+          <p id="record-error" class="notice notice--danger" role="alert" hidden></p>
+          <div class="row"><button type="submit" class="btn btn--primary">保存版本对比记录</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="chain-title">
+        <h2 id="chain-title">版本链</h2>
+        <div id="delete-confirm" class="notice notice--danger" role="alertdialog" aria-labelledby="del-title" hidden>
+          <p id="del-title"><strong>确认删除这条记录?</strong>此操作不能撤销。</p>
+          <div class="row">
+            <button type="button" class="btn btn--danger" id="btn-del-yes">确认删除</button>
+            <button type="button" class="btn btn--secondary" id="btn-del-no">取消</button>
+          </div>
+        </div>
+        <p id="chain-empty" class="hint">还没有记录。保存后,按时间从早到晚排成版本链。</p>
+        <ol class="chain" id="chain"></ol>
+      </section>
+    </section>
+  </main>
+</div>
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

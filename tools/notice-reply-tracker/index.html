@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通知回执核对</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-pane="input">
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="topbar__title">
+      <h1>通知回执核对</h1>
+      <p>粘贴名单和群聊回执,看谁回了、谁没回,一键生成催回名单。数据只存在本机浏览器。</p>
+    </div>
+    <div class="topbar__actions">
+      <span id="save-status" class="save-status" role="status"></span>
+      <button type="button" id="load-sample" class="btn btn--on-accent">载入示例</button>
+      <button type="button" id="import-btn" class="btn btn--on-accent">导入 JSON 备份</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+      <button type="button" id="clear-all" class="btn btn--on-accent">清空数据</button>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div id="save-warning" class="notice notice--danger" role="alert" hidden>
+    <p><strong>未保存:</strong>浏览器拒绝写入本机存储(空间已满或被禁用)。关闭页面会丢失当前内容,请先导出 JSON 备份。</p>
+    <div class="notice__actions"><button type="button" id="save-warning-export" class="btn btn--danger">导出 JSON 备份</button></div>
+  </div>
+  <div id="load-error" class="notice notice--danger" role="alert" hidden>
+    <p id="load-error-text"></p>
+    <div class="notice__actions"><button type="button" id="load-error-download" class="btn btn--danger" hidden>下载原始存档 JSON(无法校验的那份数据)</button></div>
+  </div>
+  <div id="confirm-box" class="notice notice--warn" role="alertdialog" aria-labelledby="confirm-text" hidden>
+    <p id="confirm-text"></p>
+    <div class="notice__actions">
+      <button type="button" id="confirm-yes" class="btn btn--danger"></button>
+      <button type="button" id="confirm-no" class="btn btn--secondary">取消</button>
+    </div>
+  </div>
+  <div id="flash" class="notice notice--ok" role="status" hidden></div>
+
+  <nav class="pane-tabs" id="pane-tabs" aria-label="切换视图">
+    <button type="button" data-pane="input" aria-pressed="true">输入</button>
+    <button type="button" data-pane="replied" aria-pressed="false">已回</button>
+    <button type="button" data-pane="unreplied" aria-pressed="false">未回</button>
+    <button type="button" data-pane="unknown" aria-pressed="false">无法识别</button>
+    <button type="button" data-pane="export" aria-pressed="false">导出</button>
+  </nav>
+
+  <main class="layout">
+    <section class="panel pane" data-pane="input" aria-labelledby="h-input">
+      <h2 id="h-input">输入</h2>
+      <label>通知标题(只用于导出文件名)
+        <input type="text" id="title" autocomplete="off" placeholder="例如:周六研学活动通知">
+      </label>
+      <label>成员名单
+        <span class="hint">每行一个姓名,或「姓名, 备注」;别名写成「张三=张三妈妈, 三三」。第一行如果写「姓名, 备注」,会被识别为表头,不算成员。</span>
+        <textarea id="roster" class="field-roster" spellcheck="false"></textarea>
+      </label>
+      <div id="roster-info" class="warn-list" aria-live="polite"></div>
+      <div id="batches" class="batches"></div>
+      <button type="button" id="add-batch" class="btn btn--secondary">追加一批回执</button>
+      <details>
+        <summary>分类关键词(逗号分隔,可修改)</summary>
+        <div class="kw-grid">
+          <label>已读/收到<input type="text" id="kw-read" autocomplete="off"></label>
+          <label>同意<input type="text" id="kw-agree" autocomplete="off"></label>
+          <label>不参加<input type="text" id="kw-decline" autocomplete="off"></label>
+          <label>有问题<input type="text" id="kw-question" autocomplete="off"></label>
+          <p class="hint">判断顺序:有问题 &gt; 不参加 &gt; 同意 &gt; 已读/收到;都不命中归「其他」。纯字母数字的关键词(如 ok、1)按整词匹配。</p>
+          <button type="button" id="kw-reset" class="btn btn--secondary btn--small">恢复默认关键词</button>
+        </div>
+      </details>
+      <label>催回模板
+        <span class="hint">{姓名}:每人一行;{名单}:合并成「@A @B」。</span>
+        <input type="text" id="template" autocomplete="off">
+      </label>
+    </section>
+
+    <div class="results">
+      <section class="summary" id="summary" aria-label="统计"></section>
+      <div id="empty-guide" class="empty-guide" hidden>
+        <h2>开始核对</h2>
+        <ol>
+          <li>在左侧「成员名单」粘贴名单(每行一个姓名)。</li>
+          <li>在「回执」框粘贴群聊文本,或逐行写「昵称: 内容」。</li>
+          <li>结果会立刻出现在这里;群里又有人回复,就点「追加一批回执」。</li>
+        </ol>
+        <p class="muted">想先看看效果:点右上角「载入示例」(合成数据,姓名均为虚构)。</p>
+      </div>
+      <div class="cols">
+        <section class="panel pane" data-pane="replied" aria-labelledby="h-replied">
+          <div class="panel__head"><h2 id="h-replied">已回</h2><span class="count-badge" id="replied-count"></span></div>
+          <div id="replied-list"></div>
+        </section>
+        <section class="panel pane" data-pane="unreplied" aria-labelledby="h-unreplied">
+          <div class="panel__head"><h2 id="h-unreplied">未回</h2><span class="count-badge" id="unreplied-count"></span></div>
+          <ul id="unreplied-list" class="entries"></ul>
+          <label>催回名单(可直接复制到群里)
+            <textarea id="remind-text" class="field-remind" readonly></textarea>
+          </label>
+          <div class="export-row">
+            <button type="button" id="copy-remind" class="btn">复制催回名单文本</button>
+          </div>
+        </section>
+        <section class="panel pane" data-pane="unknown" aria-labelledby="h-unknown">
+          <div class="panel__head"><h2 id="h-unknown">无法识别</h2><span class="count-badge" id="unknown-count"></span></div>
+          <p class="hint">这些昵称对不上名单。把昵称加进名单里对应成员的别名(如「张三=这个昵称」),结果会自动更新。</p>
+          <ul id="unknown-list" class="entries"></ul>
+        </section>
+      </div>
+      <section class="panel pane" data-pane="export" aria-labelledby="h-export">
+        <h2 id="h-export">导出</h2>
+        <p id="export-hint" class="hint"></p>
+        <div class="export-row">
+          <button type="button" id="export-csv" class="btn">导出回执表 CSV</button>
+          <button type="button" id="export-txt" class="btn btn--secondary">导出催回文本 TXT</button>
+          <button type="button" id="export-json" class="btn btn--secondary">导出 JSON 备份(名单、回执、关键词、模板)</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
