@@ -263,7 +263,7 @@ function move(feature, gate, moscow) {
 
 /* ---------- 导出 ---------- */
 
-const FORMULA = /^[=+\-@]./s;
+const FORMULA = /^[=+\-@\t\r]./s;
 function guard(v) {
   const s = String(v);
   return FORMULA.test(s) ? "'" + s : s;

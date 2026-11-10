@@ -365,7 +365,7 @@
   // ---------- 导出 ----------
   function guardCell(s) {
     s = String(s == null ? '' : s);
-    return /^[=+\-@]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
   }
   function csvCell(s) {
     s = guardCell(s);

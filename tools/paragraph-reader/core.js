@@ -270,7 +270,7 @@
   function protect(v) { // CSV/TSV/Markdown 表格:以 = + - @ 开头的用户字段加单引号前缀(单独的 - 或 + 不算)
     const s = v == null ? '' : String(v);
     if (s === '-' || s === '+') return s;
-    return /^[=+\-@]/.test(s) ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
   }
   function csvCell(v) {
     const s = protect(v);

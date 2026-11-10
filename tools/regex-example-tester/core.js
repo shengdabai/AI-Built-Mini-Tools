@@ -465,15 +465,17 @@ function tokenize(p) {
 /* ---------- CSV ---------- */
 
 function needsFormulaGuard(s) {
-  return /^'*[=+@-]/.test(s) && s !== '-' && s !== '+';
+  return /^'*[=+@\t\r-]/.test(s) && s !== '-' && s !== '+';
 }
 function guardCell(v) {
   const s = String(v);
   return needsFormulaGuard(s) ? "'" + s : s;
 }
-function unguardCell(s) {
-  return /^'+[=+@-]/.test(s) ? s.slice(1) : s;
+function unguardCell(s, controls) {
+  const re = controls ? /^'+[=+@\t\r-]/ : /^'+[=+@-]/;
+  return re.test(s) ? s.slice(1) : s;
 }
+const CONTROL_GUARD = '控制字符防护:v1';
 function csvQuote(s) {
   return /[",\r\n]/.test(s) || s !== s.trim() ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
@@ -487,7 +489,9 @@ function actualSummary(r) {
 
 function toCsv(cases, results) {
   const withResults = Array.isArray(results) && results.length === cases.length && cases.length > 0;
-  const head = ['输入', '期望', '期望捕获'].concat(withResults ? ['结果', '实际', '失败原因'] : []);
+  // Preserve legacy CSVs containing literal apostrophes before a tab.
+  const controls = cases.some(c => /^'*[\t\r]/.test(c.input));
+  const head = ['输入', '期望', '期望捕获'].concat(withResults ? ['结果', '实际', '失败原因'] : []).concat(controls ? [CONTROL_GUARD] : []);
   const rows = [head.join(',')];
   cases.forEach((c, i) => {
     const cells = [guardCell(c.input), EXPECT_WORD[c.expect], guardCell(encodeCaptureCell(c.captures || []))];
@@ -495,6 +499,7 @@ function toCsv(cases, results) {
       const r = results[i];
       cells.push(r.pass ? '通过' : (r.code === 'skipped' ? '未运行' : '失败'), guardCell(actualSummary(r)), guardCell(r.pass ? '' : r.reason + (r.detail ? ':' + r.detail : '')));
     }
+    if (controls) cells.push('');
     rows.push(cells.map(csvQuote).join(','));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
@@ -538,6 +543,7 @@ function csvToCases(text) {
   if (!p.ok) return { ok: false, errors: [p.error] };
   const rows = p.rows;
   if (!rows.length || rows[0][0] !== '输入' || rows[0][1] !== '期望') return { ok: false, errors: ['缺少表头:第一行必须以「输入,期望」开头(用本工具导出的 CSV)'] };
+  const controls = rows[0].includes(CONTROL_GUARD);
   const cases = [];
   const errors = [];
   for (let k = 1; k < rows.length; k++) {
@@ -545,12 +551,12 @@ function csvToCases(text) {
     const n = k + 1;
     if (r.length === 1 && r[0] === '') continue;
     if (r.length < 2) { errors.push('第 ' + n + ' 行列数不足'); continue; }
-    const input = unguardCell(r[0]);
+    const input = unguardCell(r[0], controls);
     const expect = r[1] === '匹配' ? 'match' : r[1] === '不匹配' ? 'nomatch' : null;
     if (!expect) { errors.push('第 ' + n + ' 行期望必须是「匹配」或「不匹配」,而不是「' + r[1] + '」'); continue; }
     if (/[\r\n]/.test(input)) { errors.push('第 ' + n + ' 行输入含换行,样例表不支持'); continue; }
     let captures = [];
-    const capText = r.length > 2 ? unguardCell(r[2]) : '';
+    const capText = r.length > 2 ? unguardCell(r[2], controls) : '';
     if (capText !== '') {
       const d = decodeCaptureCell(capText);
       if (!d.ok) { errors.push('第 ' + n + ' 行期望捕获必须是空,或 JSON 数组(元素为文字或 null),例如 ["a",null,""]'); continue; }

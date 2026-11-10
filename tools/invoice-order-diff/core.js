@@ -419,7 +419,7 @@
   function guardFormula(v) {
     if (typeof v !== 'string') return v;
     if (v === '-' || v === '+') return v;
-    return /^[=+\-@]/.test(v) ? "'" + v : v;
+    return /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
   }
   function csvCell(v) {
     var s = v == null ? '' : typeof v === 'number' ? String(v) : guardFormula(String(v));

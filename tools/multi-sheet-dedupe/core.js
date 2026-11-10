@@ -376,7 +376,7 @@
     return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
   }
 
-  const FORMULA = /^[=+\-@]/;
+  const FORMULA = /^[=+\-@\t\r]/;
   function guardFormula(s) {
     return FORMULA.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
   }

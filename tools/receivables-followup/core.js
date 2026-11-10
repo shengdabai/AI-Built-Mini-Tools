@@ -373,7 +373,7 @@ function mapCsv(table, mapping, defaultCurrency) {
 /* ---------- 导出 ---------- */
 /* 公式注入防护:以 = + - @ 开头的字符串前加单引号;单独的 - 或 + 不算 */
 function guardFormula(s) {
-  return /^[=+\-@]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
 }
 function csvCell(v) {
   if (v === null || v === undefined) return '';

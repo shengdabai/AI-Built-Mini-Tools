@@ -213,8 +213,12 @@
   const COLS = { path: ['路径', 'path'], size: ['大小', 'size'], sha256: ['sha256'], mtime: ['修改时间', 'mtime'] };
 
   // 防护可逆:公式字符开头,或「已是防护形态」(若干个 ' 后接公式字符)的值,导出时再加一个 ';导入时去掉一个
-  const GUARD_RE = /^'*[=+\-@]./;
-  function unguard(v) { return /^'+[=+\-@]./.test(v) ? v.slice(1) : v; }
+  const GUARD_RE = /^'*(?:[=+\-@].|[\t\r][\s\S])/;
+  function unguard(v, controls) {
+    const re = controls ? /^'+(?:[=+\-@].|[\t\r][\s\S])/ : /^'+[=+\-@]./;
+    return re.test(v) ? v.slice(1) : v;
+  }
+  const CONTROL_GUARD = '控制字符防护:v1';
 
   function parseManifest(text) {
     if (typeof text !== 'string' || !text.trim()) throw new Error('内容为空');
@@ -239,6 +243,7 @@
       const rows = parseCsvRows(t);
       if (!rows.length) throw new Error('CSV 没有表头');
       const head = rows[0].map(h => h.trim().toLowerCase());
+      const controls = head.includes(CONTROL_GUARD);
       const idx = {};
       for (const k of Object.keys(COLS)) idx[k] = head.findIndex(h => COLS[k].includes(h));
       for (const k of ['path', 'size', 'sha256']) if (idx[k] < 0) throw new Error(`CSV 缺少列:${COLS[k].join(' / ')}`);
@@ -246,7 +251,7 @@
         if (r.length < head.length) throw new Error(`CSV 第 ${i + 2} 行列数不足`);
         const sizeText = r[idx.size].trim();
         if (!/^\d+$/.test(sizeText)) throw new Error(`CSV 第 ${i + 2} 行:大小必须是非负整数`);
-        return { path: unguard(r[idx.path]), size: Number(sizeText), sha256: r[idx.sha256].trim(), mtime: idx.mtime >= 0 ? r[idx.mtime].trim() : '' };
+        return { path: unguard(r[idx.path], controls), size: Number(sizeText), sha256: r[idx.sha256].trim(), mtime: idx.mtime >= 0 ? r[idx.mtime].trim() : '' };
       });
     }
     const files = normalizeList(list, '清单', null).files;
@@ -265,8 +270,12 @@
   function csvLine(cells) { return cells.map(csvCell).join(','); }
 
   function toCsv(manifest) {
-    const lines = [csvLine(['路径', '大小', 'sha256', '修改时间'])];
-    for (const f of manifest.files) lines.push(csvLine([f.path, f.size, f.sha256, f.mtime || '']));
+    // Older CSVs did not escape control prefixes. Mark the new encoding so
+    // importing a legacy filename such as "'\t=1" does not remove its apostrophe.
+    const controls = manifest.files.some(f => /^'*[\t\r]/.test(f.path));
+    const marker = controls ? [CONTROL_GUARD] : [];
+    const lines = [csvLine(['路径', '大小', 'sha256', '修改时间'].concat(marker))];
+    for (const f of manifest.files) lines.push(csvLine([f.path, f.size, f.sha256, f.mtime || ''].concat(controls ? [''] : [])));
     return lines.join('\n') + '\n';
   }
 

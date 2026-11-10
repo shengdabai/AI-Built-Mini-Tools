@@ -144,7 +144,7 @@
   // ---------- 导出 ----------
   function guardCell(v) {
     const s = String(v == null ? '' : v);
-    return /^[=+\-@]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) && s !== '-' && s !== '+' ? "'" + s : s;
   }
   function csvCell(v) {
     const s = guardCell(v);
