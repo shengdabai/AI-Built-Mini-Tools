@@ -239,7 +239,7 @@
   function guard(s) {
     const v = String(s);
     if (v === '-' || v === '+') return v;
-    return /^[=+\-@]/.test(v) ? "'" + v : v;
+    return /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
   }
   function csvCell(s) {
     const v = guard(s);

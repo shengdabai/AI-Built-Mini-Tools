@@ -206,7 +206,7 @@
   function guardCell(v) {
     const s = String(v == null ? '' : v);
     if (s === '-' || s === '+') return s; // 单独的 - / + 不是公式
-    return /^[=+\-@]/.test(s) ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
   }
   function csvCell(v) {
     const s = guardCell(v);

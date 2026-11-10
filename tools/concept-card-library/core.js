@@ -385,7 +385,7 @@
   /* 公式防护:以 = + - @ 开头的字段加单引号(单独的 - 或 + 不算) */
   function guardCell(v) {
     var s = String(v == null ? '' : v);
-    return /^[=+\-@]/.test(s) && !/^[+\-]$/.test(s) ? "'" + s : s;
+    return /^[=+\-@\t\r]/.test(s) && !/^[+\-]$/.test(s) ? "'" + s : s;
   }
   function csvCell(v) {
     var s = guardCell(v);

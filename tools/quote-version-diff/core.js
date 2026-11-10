@@ -282,7 +282,7 @@
   /* ---- CSV ---- */
   function guardCell(v) {
     if (typeof v !== 'string') return v;
-    return /^[=+\-@]/.test(v) && !/^[+\-]$/.test(v) ? "'" + v : v;
+    return /^[=+\-@\t\r]/.test(v) && !/^[+\-]$/.test(v) ? "'" + v : v;
   }
   function csvCell(v) {
     if (v === null || v === undefined) return '';

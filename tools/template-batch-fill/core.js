@@ -336,7 +336,7 @@
   /* ---------- CSV ---------- */
   function guard(s) {
     s = String(s == null ? '' : s);
-    if (/^[=@]/.test(s) || /^[+\-]./.test(s)) return "'" + s;
+    if (/^[=@\t\r]/.test(s) || /^[+\-]./.test(s)) return "'" + s;
     return s;
   }
   function csvCell(s) {

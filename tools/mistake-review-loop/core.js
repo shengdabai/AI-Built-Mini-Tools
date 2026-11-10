@@ -304,9 +304,9 @@
     return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   }
 
-  /** 首字符是 = + - @ 时改写为 HTML 实体：Anki（#html:true）显示不变，电子表格不会当公式执行。 */
+  /** 公式或控制字符前缀改写为 HTML 实体：Anki（#html:true）显示不变，电子表格不会当公式执行。 */
   function guardFormula(v) {
-    var ent = { '=': '&#61;', '+': '&#43;', '-': '&#45;', '@': '&#64;' };
+    var ent = { '=': '&#61;', '+': '&#43;', '-': '&#45;', '@': '&#64;', '\t': '&#9;', '\r': '&#13;' };
     return ent[v.charAt(0)] ? ent[v.charAt(0)] + v.slice(1) : v;
   }
 

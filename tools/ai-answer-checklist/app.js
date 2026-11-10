@@ -12,6 +12,7 @@
   let tab = 'verify';
   let toastTimer = null;
   let saveTimer = null;
+  let pendingRecoveryRaw = null;
   let pendingAction = null;
   let lastProbe = '';
   let lastProbeKey = '';
@@ -53,7 +54,12 @@
     try { parsed = JSON.parse(raw); } catch (e) { /* 下面按校验失败处理 */ }
     const v = C.validateState(parsed);
     if (v.ok) { state = v.state; return; }
-    try { localStorage.setItem(KEY + '.rejected', raw); } catch (e) { /* 备份失败也继续 */ }
+    try { localStorage.setItem(KEY + '.rejected', raw); }
+    catch (e) {
+      pendingRecoveryRaw = raw;
+      showSaveWarning('旧数据备份失败,已暂停保存以保留原文。请释放浏览器存储空间后重试;当前新改动可导出 JSON 备份。');
+      return;
+    }
     toast('浏览器里已保存的数据没有通过校验,未载入(原文已另存为 answercheck.v1.rejected)。继续操作会覆盖当前存储。', true);
   }
   // 返回是否真正写入。保存前与读取后用同一个 validateState
@@ -61,6 +67,10 @@
     clearTimeout(saveTimer); saveTimer = null;
     const v = C.validateState(state);
     if (!v.ok) { showSaveWarning('当前数据没有通过校验,未写入:' + v.errors[0] + '。请先导出 JSON 备份。'); return false; }
+    if (pendingRecoveryRaw !== null) {
+      try { localStorage.setItem(KEY + '.rejected', pendingRecoveryRaw); pendingRecoveryRaw = null; }
+      catch (e) { showSaveWarning('旧数据仍未备份,没有覆盖原文。请释放浏览器存储空间后重试;当前新改动可导出 JSON 备份。'); return false; }
+    }
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { showSaveWarning('浏览器存储写入失败(可能已满或被禁用)。最近的改动只在内存里,刷新会丢失。请立刻到「统计与导出」导出 JSON 备份。'); return false; }
     $('save-warning').hidden = true;

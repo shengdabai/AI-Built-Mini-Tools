@@ -184,7 +184,7 @@
   }
   function guardFormula(s) {
     s = String(s);
-    if (/^[=+\-@]/.test(s) && s !== '-' && s !== '+') return "'" + s;
+    if (/^[=+\-@\t\r]/.test(s) && s !== '-' && s !== '+') return "'" + s;
     return s;
   }
   function csvCell(v) {
